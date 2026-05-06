@@ -3,7 +3,6 @@ import { setCors, readJson } from '../_lib/http.js'
 import { verifyTelegramData, parseTelegramUser } from '../_lib/telegram.js'
 import { parseJson, TelegramInitDataSchema } from '../_lib/validation.js'
 import { accessQueue } from '../../workers/queues/accessQueue.mjs'
-import { logEvent } from '../../services/subscriptionEvents.service.mjs'
 
 export default async function handler(req, res) {
   setCors(res)
@@ -36,7 +35,5 @@ export default async function handler(req, res) {
     { jobId: `regen:${userId}:${Date.now()}` },
   )
 
-  await logEvent({ userId: String(tgUser.id), type: 'invite_regen_requested', metadata: {} }).catch(() => {})
   return res.json({ ok: true, enqueued: true })
 }
-

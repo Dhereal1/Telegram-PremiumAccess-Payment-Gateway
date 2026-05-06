@@ -39,6 +39,10 @@ const worker = new Worker(
     }
 
     try {
+      if (forceRegenerate) {
+        await logEvent({ userId: String(claimed.telegram_id), type: 'invite_regen_requested', metadata: {} }).catch(() => {})
+      }
+
       const inviteLink = await createInviteLink({ memberLimit: 1, expireSeconds: 3600 })
       await setInviteInfo({ userId, inviteLink })
       await logEvent({ userId: String(claimed.telegram_id), type: 'invite_sent', metadata: { inviteLink } })
