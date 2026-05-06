@@ -1,11 +1,14 @@
 import { getPool } from '../_lib/db.js';
-import { setCors } from '../_lib/http.js';
+import { requireCronAuth, setCors } from '../_lib/http.js';
 import { createInviteLink, sendAccessMessage } from '../_lib/telegram-bot.js';
 
 export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+
+  const auth = requireCronAuth(req);
+  if (!auth.ok) return res.status(401).json({ error: 'Unauthorized' });
 
   const botToken = process.env.BOT_TOKEN;
   const channelId = process.env.CHANNEL_ID;
@@ -57,4 +60,3 @@ export default async function handler(req, res) {
 
   return res.json({ ok: true, scanned: users.rows.length, granted, skipped, errors });
 }
-

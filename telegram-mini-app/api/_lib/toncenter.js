@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Address, toNano } from '@ton/core';
+import { Address, Cell, Slice, toNano } from '@ton/core';
 
 export function normalizeTonAddress(address) {
   if (!address || typeof address !== 'string') return null;
@@ -24,7 +24,45 @@ export function parseCommentFromTx(tx) {
     return msgData.text.trim();
   }
 
+  // If body is provided as raw BOC, decode comment payload (opcode=0 + string tail)
+  // Common shape: { "@type": "msg.dataRaw", "body": "<base64>", "init_state": "<base64>" }
+  if (msgData['@type'] === 'msg.dataRaw' && typeof msgData.body === 'string' && msgData.body) {
+    const comment = tryDecodeCommentFromBocBase64(msgData.body);
+    if (comment) return comment;
+  }
+
   return null;
+}
+
+function tryDecodeCommentFromBocBase64(bodyBase64) {
+  try {
+    // TON Center returns standard base64; BOC is binary
+    const buf = Buffer.from(bodyBase64, 'base64');
+    const cells = Cell.fromBoc(buf);
+    const cell = cells[0];
+    if (!cell) return null;
+
+    let slice = cell.beginParse();
+    // op is 32-bit unsigned, 0 indicates comment
+    if (slice.remainingBits < 32) return null;
+    const op = slice.loadUint(32);
+    if (op !== 0) return null;
+
+    const text = loadStringTailSafe(slice);
+    return text?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function loadStringTailSafe(slice) {
+  // @ton/core Slice supports loadStringTail() in most versions; provide fallback.
+  if (typeof slice.loadStringTail === 'function') return slice.loadStringTail();
+
+  // Fallback: read remaining bits as bytes and decode utf8 (best-effort).
+  const remainingBytes = Math.floor(slice.remainingBits / 8);
+  const bytes = slice.loadBuffer(remainingBytes);
+  return bytes.toString('utf8');
 }
 
 export function extractTelegramIdFromComment(comment) {
@@ -63,4 +101,3 @@ export async function getTransactions({ apiUrl, apiKey, address, limit = 20 }) {
 
   return res.data?.result || [];
 }
-

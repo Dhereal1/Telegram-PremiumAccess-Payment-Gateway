@@ -37,6 +37,7 @@ Set Vercel environment variables:
 - (optional) `TELEGRAM_WEBHOOK_SECRET` (recommended)
 - (optional) `TELEGRAM_AUTH_MAX_AGE_SECONDS`
 - (optional) `PG_POOL_MAX`, `PG_IDLE_TIMEOUT_MS`, `PG_CONN_TIMEOUT_MS`
+- (optional) `CRON_SECRET` (required only if you want to trigger `/api/cron/*` manually)
 
 ### Neon table update (wallet)
 

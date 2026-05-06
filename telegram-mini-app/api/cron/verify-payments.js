@@ -1,5 +1,5 @@
 import { getPool } from '../_lib/db.js';
-import { setCors } from '../_lib/http.js';
+import { requireCronAuth, setCors } from '../_lib/http.js';
 import {
   extractTelegramIdFromComment,
   getTransactions,
@@ -12,6 +12,9 @@ export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+
+  const auth = requireCronAuth(req);
+  if (!auth.ok) return res.status(401).json({ error: 'Unauthorized' });
 
   const receiverAddress = process.env.TON_RECEIVER_ADDRESS;
   const priceTon = Number(process.env.TON_PRICE_TON || '0.1');
