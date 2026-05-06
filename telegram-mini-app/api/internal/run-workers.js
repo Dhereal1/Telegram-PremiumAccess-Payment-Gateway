@@ -1,5 +1,6 @@
 import { Queue, Worker } from 'bullmq'
 import IORedis from 'ioredis'
+import crypto from 'crypto'
 import { setCors } from '../_lib/http.js'
 import { getDb } from '../../workers/_lib/db.mjs'
 import { getWorkerLogger } from '../../workers/_lib/logger.mjs'
@@ -178,6 +179,19 @@ export default async function handler(req, res) {
   if (!receiverAddress) return res.status(500).json({ error: 'Missing TON_RECEIVER_ADDRESS' })
 
   const connection = new IORedis(redisUrl, { maxRetriesPerRequest: null, enableReadyCheck: false })
+  const runId = crypto.randomUUID()
+  const lockKey = 'run-workers:lock'
+  const lockTtlMs = Number(process.env.RUN_WORKERS_LOCK_TTL_MS || '55000')
+
+  const gotLock = await connection.set(lockKey, runId, 'PX', lockTtlMs, 'NX')
+  if (gotLock !== 'OK') {
+    try {
+      await connection.quit()
+    } catch {
+      // ignore
+    }
+    return res.status(202).json({ ok: true, skipped: true, reason: 'run-workers already running' })
+  }
 
   const paymentVerificationQueue = new Queue('payment-verification', { connection })
   const accessGrantQueue = new Queue('access-grant', { connection })
@@ -264,6 +278,8 @@ export default async function handler(req, res) {
       // ignore
     }
     try {
+      const cur = await connection.get(lockKey)
+      if (cur === runId) await connection.del(lockKey)
       await connection.quit()
     } catch {
       // ignore
