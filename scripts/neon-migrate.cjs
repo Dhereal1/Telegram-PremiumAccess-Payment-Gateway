@@ -52,6 +52,12 @@ async function main() {
       paid_at TIMESTAMP,
       tx_hash TEXT
     );`,
+    `DO $$
+     BEGIN
+       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'payment_intents_id_unique') THEN
+         ALTER TABLE payment_intents ADD CONSTRAINT payment_intents_id_unique UNIQUE (id);
+       END IF;
+     END $$;`,
     `CREATE INDEX IF NOT EXISTS payment_intents_telegram_id_idx ON payment_intents (telegram_id);`,
     `CREATE INDEX IF NOT EXISTS payment_intents_status_idx ON payment_intents (status);`,
     `CREATE UNIQUE INDEX IF NOT EXISTS payment_intents_tx_hash_uq ON payment_intents (tx_hash) WHERE tx_hash IS NOT NULL;`,
@@ -64,6 +70,18 @@ async function main() {
       comment TEXT,
       created_at TIMESTAMP DEFAULT NOW()
     );`,
+    `DO $$
+     BEGIN
+       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'payments_tx_hash_unique') THEN
+         ALTER TABLE payments ADD CONSTRAINT payments_tx_hash_unique UNIQUE (tx_hash);
+       END IF;
+     END $$;`,
+    `DO $$
+     BEGIN
+       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'payments_payment_intent_id_unique') THEN
+         ALTER TABLE payments ADD CONSTRAINT payments_payment_intent_id_unique UNIQUE (payment_intent_id);
+       END IF;
+     END $$;`,
     `CREATE INDEX IF NOT EXISTS payments_telegram_id_idx ON payments (telegram_id);`,
     `CREATE TABLE IF NOT EXISTS subscription_events (
       id UUID PRIMARY KEY,
@@ -77,6 +95,20 @@ async function main() {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
       updated_at TIMESTAMP DEFAULT NOW()
+    );`,
+    `CREATE TABLE IF NOT EXISTS blockchain_cursors (
+      id TEXT PRIMARY KEY,
+      last_lt BIGINT,
+      last_hash TEXT,
+      updated_at TIMESTAMP DEFAULT NOW()
+    );`,
+    `CREATE TABLE IF NOT EXISTS failed_jobs (
+      id SERIAL PRIMARY KEY,
+      job_id TEXT,
+      queue_name TEXT,
+      payload JSONB,
+      error TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
     );`,
   ];
 

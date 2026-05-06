@@ -1,42 +1,32 @@
-import { getDb } from '../_lib/db.mjs';
-import { getWorkerEnv } from '../_lib/worker-env.mjs';
-import { getWorkerLogger } from '../_lib/logger.mjs';
-import { getTransactions, getTxCursor } from '../api/_lib/toncenter.js';
-import { enqueuePaymentVerification } from '../producers/enqueuePaymentVerification.mjs';
+import { getDb } from '../_lib/db.mjs'
+import { getWorkerEnv } from '../_lib/worker-env.mjs'
+import { getWorkerLogger } from '../_lib/logger.mjs'
+import { getTransactions, getTxCursor } from '../../api/_lib/toncenter.js'
+import { enqueuePaymentVerification } from '../producers/enqueuePaymentVerification.mjs'
 
 const env = getWorkerEnv();
 const log = getWorkerLogger();
 const pool = getDb();
 
-async function getCheckpoint() {
-  const prefix = `ton:${env.TON_RECEIVER_ADDRESS}:`;
-  const lastLtRow = await pool.query('SELECT value FROM verifier_state WHERE key = $1', [`${prefix}last_lt`]);
-  const lastHashRow = await pool.query('SELECT value FROM verifier_state WHERE key = $1', [`${prefix}last_hash`]);
-  return {
-    prefix,
-    lastLt: lastLtRow.rows[0]?.value || null,
-    lastHash: lastHashRow.rows[0]?.value || null,
-  };
+async function getCursor() {
+  const id = `ton:${env.TON_RECEIVER_ADDRESS}`
+  const row = await pool.query('SELECT last_lt, last_hash FROM blockchain_cursors WHERE id=$1', [id])
+  const cur = row.rows[0] || {}
+  return { id, lastLt: cur.last_lt ? String(cur.last_lt) : null, lastHash: cur.last_hash || null }
 }
 
-async function setCheckpoint(prefix, cur) {
-  if (!cur?.lt || !cur?.hash) return;
+async function saveCursor(id, cur) {
+  if (!cur?.lt || !cur?.hash) return
   await pool.query(
-    `INSERT INTO verifier_state (key, value)
-     VALUES ($1, $2)
-     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
-    [`${prefix}last_lt`, String(cur.lt)],
-  );
-  await pool.query(
-    `INSERT INTO verifier_state (key, value)
-     VALUES ($1, $2)
-     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
-    [`${prefix}last_hash`, String(cur.hash)],
-  );
+    `INSERT INTO blockchain_cursors (id, last_lt, last_hash, updated_at)
+     VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (id) DO UPDATE SET last_lt=EXCLUDED.last_lt, last_hash=EXCLUDED.last_hash, updated_at=NOW()`,
+    [id, String(cur.lt), String(cur.hash)]
+  )
 }
 
 async function pollOnce() {
-  const { prefix, lastLt, lastHash } = await getCheckpoint();
+  const { id, lastLt, lastHash } = await getCursor();
   const pageLimit = Number(process.env.TON_TX_PAGE_LIMIT || '50');
   const maxPages = Number(process.env.TON_TX_MAX_PAGES || '8');
 
@@ -85,9 +75,12 @@ async function pollOnce() {
 
     await enqueuePaymentVerification({ tx });
     enqueued++;
+
+    // Update cursor sequentially only after enqueue succeeds (prevents gaps on restart)
+    const cur = getTxCursor(tx)
+    if (cur) await saveCursor(id, cur)
   }
 
-  if (newestSeen) await setCheckpoint(prefix, newestSeen);
   return { enqueued, newestSeen, scanned: collected.length };
 }
 

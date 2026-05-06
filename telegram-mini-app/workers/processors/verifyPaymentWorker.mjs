@@ -11,6 +11,7 @@ import {
   parseCommentFromTx,
 } from '../api/_lib/toncenter.js';
 import { enqueueAccessGrant } from '../producers/enqueueAccessGrant.mjs';
+import { logFailedJob } from '../_lib/failedJobs.mjs';
 
 const env = getWorkerEnv();
 const log = getWorkerLogger();
@@ -49,6 +50,7 @@ async function processJob(job) {
 
   const pi = intent.rows[0];
   if (String(pi.telegram_id) !== String(telegramId)) return { ok: false, reason: 'Intent telegram mismatch', txHash };
+  if (pi.status === 'paid') return { ok: true, status: 'intent_paid', txHash };
   if (pi.status !== 'pending') return { ok: true, status: `intent_${pi.status}`, txHash };
 
   // Expiry check
@@ -140,7 +142,14 @@ const worker = new Worker(
 );
 
 worker.on('failed', (job, err) => {
-  log.error({ jobId: job?.id, err: String(err?.message || err) }, 'verify_payment_failed');
+  log.error({ jobId: job?.id, queue: 'payment-verification', err: String(err?.message || err) }, 'verify_payment_failed');
+  // Fire-and-forget; do not block worker failure event
+  logFailedJob({
+    jobId: job?.id,
+    queue: 'payment-verification',
+    payload: job?.data,
+    error: String(err?.message || err),
+  }).catch(() => {});
 });
 
 log.info('verifyPaymentWorker started');

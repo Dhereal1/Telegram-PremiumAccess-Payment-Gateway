@@ -3,8 +3,9 @@ import { connection } from '../queues/connection.mjs'
 import { getWorkerLogger } from '../_lib/logger.mjs'
 
 import { getUserById } from '../../services/user.service.mjs'
-import { markAccessGranted } from '../../services/subscription.service.mjs'
+import { markAccessGrantedIfNotExists, unmarkAccessGranted } from '../../services/subscription.service.mjs'
 import { createInviteLink, sendMessage } from '../../services/telegram.service.mjs'
+import { logFailedJob } from '../_lib/failedJobs.mjs'
 
 const logger = getWorkerLogger()
 
@@ -21,19 +22,26 @@ const worker = new Worker(
       return
     }
 
-    if (user.access_granted) {
-      logger.info({ jobId: job.id, userId }, 'access_grant_already_granted')
-      return
-    }
-
     if (!user.payment_status) {
       logger.warn({ jobId: job.id, userId }, 'access_grant_not_paid')
       return
     }
 
-    const inviteLink = await createInviteLink({ memberLimit: 1, expireSeconds: 3600 })
-    await sendMessage(telegramId, `✅ Payment confirmed!\n\nJoin here:\n${inviteLink}`)
-    await markAccessGranted(userId)
+    // Atomic claim to prevent duplicate invites under concurrency.
+    const claimed = await markAccessGrantedIfNotExists(userId)
+    if (!claimed) {
+      logger.info({ jobId: job.id, userId }, 'access_grant_already_claimed')
+      return
+    }
+
+    try {
+      const inviteLink = await createInviteLink({ memberLimit: 1, expireSeconds: 3600 })
+      await sendMessage(telegramId, `✅ Payment confirmed!\n\nJoin here:\n${inviteLink}`)
+    } catch (e) {
+      // Roll back claim so retries can attempt again.
+      await unmarkAccessGranted(userId)
+      throw e
+    }
 
     logger.info({ jobId: job.id, userId }, 'access_grant_success')
   },
@@ -42,6 +50,12 @@ const worker = new Worker(
 
 worker.on('failed', (job, err) => {
   logger.error({ jobId: job?.id, err: String(err?.message || err) }, 'access_grant_failed')
+  logFailedJob({
+    jobId: job?.id,
+    queue: 'access-grant',
+    payload: job?.data,
+    error: String(err?.message || err)
+  }).catch(() => {})
 })
 
 export default worker
