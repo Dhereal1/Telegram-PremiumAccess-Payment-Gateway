@@ -1,15 +1,36 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { TonConnectUIProvider } from '@tonconnect/ui-react'
 import './index.css'
 import App from './App.jsx'
 
-const manifestUrl = new URL('/api/tonconnect/manifest', window.location.href).toString()
+function renderFatal(message) {
+  const root = document.getElementById('root')
+  if (!root) return
+  root.innerHTML = `<div style="padding:16px;font-family:system-ui;color:#fff;background:#0f0f10;white-space:pre-wrap">Mini App failed to start:\n${message}</div>`
+}
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <TonConnectUIProvider manifestUrl={manifestUrl}>
-      <App />
-    </TonConnectUIProvider>
-  </StrictMode>,
-)
+window.addEventListener('error', (e) => {
+  renderFatal(e?.error?.message || e?.message || 'Unknown error')
+})
+window.addEventListener('unhandledrejection', (e) => {
+  renderFatal(e?.reason?.message || String(e?.reason || 'Unhandled rejection'))
+})
+
+async function boot() {
+  try {
+    const { TonConnectUIProvider } = await import('@tonconnect/ui-react')
+    const manifestUrl = new URL('/api/tonconnect/manifest', window.location.href).toString()
+
+    createRoot(document.getElementById('root')).render(
+      <StrictMode>
+        <TonConnectUIProvider manifestUrl={manifestUrl}>
+          <App />
+        </TonConnectUIProvider>
+      </StrictMode>,
+    )
+  } catch (e) {
+    renderFatal(e?.message || String(e))
+  }
+}
+
+boot()

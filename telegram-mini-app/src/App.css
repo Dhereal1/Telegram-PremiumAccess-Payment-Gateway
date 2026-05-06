@@ -27,8 +27,8 @@
 }
 
 .card {
-  background: color-mix(in srgb, var(--tg-bg-color) 92%, #ffffff 8%);
-  border: 1px solid color-mix(in srgb, var(--tg-hint-color) 35%, transparent 65%);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 14px;
   padding: 16px;
 }
@@ -39,7 +39,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 10px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--tg-hint-color) 25%, transparent 75%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .row:last-child {
@@ -93,8 +93,8 @@
   width: 100%;
   padding: 12px 14px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--tg-hint-color) 35%, transparent 65%);
-  background: color-mix(in srgb, var(--tg-text-color) 12%, transparent 88%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.10);
   color: var(--tg-text-color);
   font-weight: 700;
   cursor: pointer;
