@@ -9,7 +9,6 @@ function App() {
   const [authError, setAuthError] = useState(null)
 
   const tg = useMemo(() => window.Telegram?.WebApp, [])
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || ''
 
   useEffect(() => {
     if (!tg) return
@@ -26,7 +25,6 @@ function App() {
 
   useEffect(() => {
     if (!tg?.initData) return
-    if (!apiBaseUrl) return
 
     let cancelled = false
 
@@ -35,7 +33,7 @@ function App() {
         setAuthStatus('loading')
         setAuthError(null)
 
-        const resp = await fetch(`${apiBaseUrl.replace(/\/$/, '')}/api/auth/telegram`, {
+        const resp = await fetch(`/api/auth/telegram`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ initData: tg.initData }),
@@ -60,7 +58,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [apiBaseUrl, tg])
+  }, [tg])
 
   return (
     <div className="app">
@@ -96,7 +94,7 @@ function App() {
       {isTelegram && tg?.initData ? (
         <footer className="footer">
           <span className="hint">
-            initData present ✅{apiBaseUrl ? ` • auth: ${authStatus}` : ' • set VITE_API_BASE_URL to enable auth'}
+            initData present ✅ • auth: {authStatus}
           </span>
           {authError ? <div className="hint">{authError}</div> : null}
         </footer>

@@ -22,3 +22,15 @@ Telegram Mini Apps require **HTTPS**. For testing inside Telegram:
 - Expose your dev server with a tunnel (ngrok / Cloudflare Tunnel), or
 - Deploy to Vercel early.
 
+## Vercel (single repo deploy)
+
+Recommended setup: create **one Vercel project** and set **Root Directory** to `telegram-mini-app`.
+
+This deploys:
+- Static Mini App frontend (Vite build)
+- Serverless API routes under `/api/*` from `telegram-mini-app/api/`
+
+Set Vercel environment variables:
+- `BOT_TOKEN`
+- `DATABASE_URL`
+- (optional) `TELEGRAM_AUTH_MAX_AGE_SECONDS`

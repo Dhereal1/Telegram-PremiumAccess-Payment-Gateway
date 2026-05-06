@@ -40,4 +40,3 @@ module.exports = async function handler(req, res) {
 
   return res.json({ user: result.rows[0] });
 };
-

@@ -1,8 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { getPool } = require('./api/_lib/db');
-const { verifyTelegramData, parseTelegramUser } = require('./api/_lib/telegram');
+const { getPool } = require('./telegram-mini-app/api/_lib/db');
+const { verifyTelegramData, parseTelegramUser } = require('./telegram-mini-app/api/_lib/telegram');
 
 const app = express();
 app.use(cors());
@@ -53,4 +53,3 @@ app.get('/user/status/:telegram_id', async (req, res) => {
 
 const port = Number(process.env.PORT || 3001);
 app.listen(port, () => console.log(`API listening on http://localhost:${port}`));
-

@@ -15,4 +15,3 @@ module.exports = async function handler(req, res) {
   if (result.rows.length === 0) return res.json({ exists: false });
   return res.json({ exists: true, user: result.rows[0] });
 };
-
