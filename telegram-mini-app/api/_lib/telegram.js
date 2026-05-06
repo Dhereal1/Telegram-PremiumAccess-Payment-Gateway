@@ -1,4 +1,4 @@
-const crypto = require('crypto');
+import crypto from 'crypto';
 
 function timingSafeEqualHex(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
@@ -8,7 +8,7 @@ function timingSafeEqualHex(a, b) {
   return crypto.timingSafeEqual(aBuf, bBuf);
 }
 
-function verifyTelegramData(initData, botToken, { maxAgeSeconds } = {}) {
+export function verifyTelegramData(initData, botToken, { maxAgeSeconds } = {}) {
   if (!initData || typeof initData !== 'string') return { ok: false, reason: 'Missing initData' };
   if (!botToken) return { ok: false, reason: 'Missing bot token' };
 
@@ -38,7 +38,7 @@ function verifyTelegramData(initData, botToken, { maxAgeSeconds } = {}) {
   return ok ? { ok: true } : { ok: false, reason: 'Hash mismatch' };
 }
 
-function parseTelegramUser(initData) {
+export function parseTelegramUser(initData) {
   const urlParams = new URLSearchParams(initData);
   const rawUser = urlParams.get('user');
   if (!rawUser) return null;
@@ -48,6 +48,3 @@ function parseTelegramUser(initData) {
     return null;
   }
 }
-
-module.exports = { verifyTelegramData, parseTelegramUser };
-

@@ -1,7 +1,7 @@
-const { getPool } = require('../../_lib/db');
-const { setCors } = require('../../_lib/http');
+import { getPool } from '../../_lib/db.js';
+import { setCors } from '../../_lib/http.js';
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
@@ -14,4 +14,4 @@ module.exports = async function handler(req, res) {
 
   if (result.rows.length === 0) return res.json({ exists: false });
   return res.json({ exists: true, user: result.rows[0] });
-};
+}

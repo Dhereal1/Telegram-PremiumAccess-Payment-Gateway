@@ -1,8 +1,8 @@
-const { getPool } = require('../_lib/db');
-const { setCors, readJson } = require('../_lib/http');
-const { verifyTelegramData, parseTelegramUser } = require('../_lib/telegram');
+import { getPool } from '../_lib/db.js';
+import { setCors, readJson } from '../_lib/http.js';
+import { verifyTelegramData, parseTelegramUser } from '../_lib/telegram.js';
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -39,4 +39,4 @@ module.exports = async function handler(req, res) {
   );
 
   return res.json({ user: result.rows[0] });
-};
+}

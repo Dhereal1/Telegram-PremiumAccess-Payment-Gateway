@@ -1,8 +1,10 @@
-const { Pool } = require('pg');
+import pg from 'pg';
+
+const { Pool } = pg;
 
 let pool;
 
-function getPool() {
+export function getPool() {
   if (pool) return pool;
   if (!process.env.DATABASE_URL) {
     throw new Error('Missing DATABASE_URL env var');
@@ -16,5 +18,3 @@ function getPool() {
 
   return pool;
 }
-
-module.exports = { getPool };
