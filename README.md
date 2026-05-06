@@ -71,6 +71,8 @@ CREATE TABLE users (
   first_name TEXT,
   last_name TEXT,
   wallet_address TEXT,
+  payment_status BOOLEAN DEFAULT FALSE,
+  expiry_date TIMESTAMP,
   created_at TIMESTAMP DEFAULT NOW()
 );
 ```
@@ -79,6 +81,25 @@ If you already created the table, add the wallet column:
 
 ```sql
 ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_address TEXT;
+```
+
+Add payment fields:
+
+```sql
+ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_status BOOLEAN DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS expiry_date TIMESTAMP;
+```
+
+Create a processed transaction table (to prevent duplicates):
+
+```sql
+CREATE TABLE IF NOT EXISTS processed_transactions (
+  tx_hash TEXT PRIMARY KEY,
+  telegram_id TEXT,
+  status TEXT NOT NULL,
+  reason TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
 ```
 
 ### Local dev (Express)

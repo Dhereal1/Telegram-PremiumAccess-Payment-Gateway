@@ -50,6 +50,32 @@ Set these Vercel env vars (Preview + Production) to control payments:
 - `VITE_TON_RECEIVER_ADDRESS` (merchant TON address)
 - `VITE_TON_PRICE_TON` (e.g. `0.1` for testing)
 
+## Step 6 (Verification worker)
+
+DB migrations:
+
+```sql
+ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_status BOOLEAN DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS expiry_date TIMESTAMP;
+
+CREATE TABLE IF NOT EXISTS processed_transactions (
+  tx_hash TEXT PRIMARY KEY,
+  telegram_id TEXT,
+  status TEXT NOT NULL,
+  reason TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+Serverless polling endpoint (trigger via Vercel Cron every 15–30s/min):
+- `GET/POST /api/cron/verify-payments` (`telegram-mini-app/api/cron/verify-payments.js`)
+
+Vercel env vars required:
+- `TON_RECEIVER_ADDRESS` (same as your merchant address)
+- `TON_PRICE_TON` (minimum TON to accept, e.g. `0.1` for testing)
+- (optional) `TON_API_URL` (default `https://toncenter.com/api/v2`)
+- (optional) `TON_API_KEY` (recommended)
+
 ## Bot on Vercel (webhook)
 
 This repo includes a serverless Telegram webhook handler:

@@ -13,5 +13,11 @@ export default async function handler(req, res) {
   const result = await pool.query('SELECT * FROM users WHERE telegram_id = $1', [String(telegramId)]);
 
   if (result.rows.length === 0) return res.json({ exists: false });
-  return res.json({ exists: true, user: result.rows[0] });
+  const user = result.rows[0];
+  return res.json({
+    exists: true,
+    paid: Boolean(user.payment_status),
+    expiry: user.expiry_date,
+    user,
+  });
 }
