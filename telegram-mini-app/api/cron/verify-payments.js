@@ -6,6 +6,7 @@ import {
   isValidIncomingPayment,
   parseCommentFromTx,
 } from '../_lib/toncenter.js';
+import { createInviteLink, sendAccessMessage } from '../_lib/telegram-bot.js';
 
 export default async function handler(req, res) {
   setCors(res);
@@ -16,6 +17,8 @@ export default async function handler(req, res) {
   const priceTon = Number(process.env.TON_PRICE_TON || '0.1');
   const apiUrl = process.env.TON_API_URL || 'https://toncenter.com/api/v2';
   const apiKey = process.env.TON_API_KEY || '';
+  const botToken = process.env.BOT_TOKEN || '';
+  const channelId = process.env.CHANNEL_ID || '';
 
   if (!receiverAddress) return res.status(500).json({ error: 'Missing TON_RECEIVER_ADDRESS' });
 
@@ -26,6 +29,7 @@ export default async function handler(req, res) {
   let processed = 0;
   let confirmed = 0;
   let skipped = 0;
+  let accessGranted = 0;
 
   for (const tx of txs) {
     const txHash = tx?.transaction_id?.hash || tx?.in_msg?.hash || tx?.hash;
@@ -87,8 +91,22 @@ export default async function handler(req, res) {
       'INSERT INTO processed_transactions (tx_hash, status, reason, telegram_id) VALUES ($1, $2, $3, $4)',
       [String(txHash), 'confirmed', 'OK', String(telegramId)],
     );
+
+    // Optional: immediately grant access after confirmation (best-effort)
+    if (botToken && channelId) {
+      try {
+        const row = await pool.query('SELECT access_granted FROM users WHERE telegram_id = $1', [String(telegramId)]);
+        if (row.rows.length && row.rows[0].access_granted !== true) {
+          const inviteLink = await createInviteLink({ botToken, channelId, memberLimit: 1, expireSeconds: 3600 });
+          await sendAccessMessage({ botToken, telegramId: String(telegramId), inviteLink });
+          await pool.query('UPDATE users SET access_granted = true WHERE telegram_id = $1', [String(telegramId)]);
+          accessGranted++;
+        }
+      } catch {
+        // ignore and allow the dedicated grant-access cron to retry
+      }
+    }
   }
 
-  return res.json({ ok: true, processed, confirmed, skipped, receiverAddress, priceTon });
+  return res.json({ ok: true, processed, confirmed, accessGranted, skipped, receiverAddress, priceTon });
 }
-

@@ -57,6 +57,7 @@ DB migrations:
 ```sql
 ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_status BOOLEAN DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS expiry_date TIMESTAMP;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS access_granted BOOLEAN DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS processed_transactions (
   tx_hash TEXT PRIMARY KEY,
@@ -75,6 +76,18 @@ Vercel env vars required:
 - `TON_PRICE_TON` (minimum TON to accept, e.g. `0.1` for testing)
 - (optional) `TON_API_URL` (default `https://toncenter.com/api/v2`)
 - (optional) `TON_API_KEY` (recommended)
+
+## Step 7 (Telegram access control)
+
+Requires:
+- Bot is admin in the private channel with permission to invite users
+- `CHANNEL_ID` (e.g. `-100...`) set in Vercel env
+
+Endpoints:
+- `GET/POST /api/cron/grant-access` (`telegram-mini-app/api/cron/grant-access.js`)
+
+Notes:
+- Invite links are created with `member_limit=1` and `expire_date` (~1 hour).
 
 ## Bot on Vercel (webhook)
 

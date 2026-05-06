@@ -88,6 +88,7 @@ Add payment fields:
 ```sql
 ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_status BOOLEAN DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS expiry_date TIMESTAMP;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS access_granted BOOLEAN DEFAULT FALSE;
 ```
 
 Create a processed transaction table (to prevent duplicates):

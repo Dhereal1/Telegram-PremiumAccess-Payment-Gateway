@@ -25,6 +25,7 @@ async function main() {
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_address TEXT;`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_status BOOLEAN DEFAULT FALSE;`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS expiry_date TIMESTAMP;`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS access_granted BOOLEAN DEFAULT FALSE;`,
     `CREATE TABLE IF NOT EXISTS processed_transactions (
       tx_hash TEXT PRIMARY KEY,
       telegram_id TEXT,
@@ -59,4 +60,3 @@ main().catch((e) => {
   console.error('migration failed:', e.message || e);
   process.exitCode = 1;
 });
-
