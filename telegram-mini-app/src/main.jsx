@@ -6,7 +6,13 @@ import App from './App.jsx'
 function renderFatal(message) {
   const root = document.getElementById('root')
   if (!root) return
-  root.innerHTML = `<div style="padding:16px;font-family:system-ui;color:#fff;background:#0f0f10;white-space:pre-wrap">Mini App failed to start:\n${message}</div>`
+  const escaped = String(message)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+  root.innerHTML = `<div style="padding:16px;font-family:system-ui;color:#fff;background:#0f0f10;white-space:pre-wrap">Mini App failed to start:\n${escaped}</div>`
 }
 
 window.addEventListener('error', (e) => {

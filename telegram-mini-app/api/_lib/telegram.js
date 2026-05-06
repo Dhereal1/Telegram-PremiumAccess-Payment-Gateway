@@ -21,6 +21,7 @@ export function verifyTelegramData(initData, botToken, { maxAgeSeconds } = {}) {
     const authDateSec = Number(authDate);
     const nowSec = Math.floor(Date.now() / 1000);
     if (!Number.isFinite(authDateSec)) return { ok: false, reason: 'Invalid auth_date' };
+    if (authDateSec > nowSec + 60) return { ok: false, reason: 'auth_date is in the future' };
     if (nowSec - authDateSec > maxAgeSeconds) return { ok: false, reason: 'initData expired' };
   }
 

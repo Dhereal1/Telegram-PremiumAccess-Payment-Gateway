@@ -34,7 +34,9 @@ Set Vercel environment variables:
 - `BOT_TOKEN`
 - `DATABASE_URL`
 - `WEB_APP_URL` (set this to your **production** Mini App URL, HTTPS)
+- (optional) `TELEGRAM_WEBHOOK_SECRET` (recommended)
 - (optional) `TELEGRAM_AUTH_MAX_AGE_SECONDS`
+- (optional) `PG_POOL_MAX`, `PG_IDLE_TIMEOUT_MS`, `PG_CONN_TIMEOUT_MS`
 
 ### Neon table update (wallet)
 
@@ -58,6 +60,8 @@ After deploying, set the webhook (run locally from repo root):
 ```bash
 node -e "require('dotenv').config(); fetch(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/setWebhook`, {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({url: process.env.WEBHOOK_URL})}).then(r=>r.json()).then(console.log)"
 ```
+
+Recommended: also send a secret token and set it in Vercel env as `TELEGRAM_WEBHOOK_SECRET`.
 
 Where `WEBHOOK_URL` should be your deployed URL + `/api/telegram/webhook`, for example:
 `https://<your-prod-domain>/api/telegram/webhook`
