@@ -1,0 +1,9 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/verify-payments",
+      "schedule": "*/1 * * * *"
+    }
+  ]
+}
+

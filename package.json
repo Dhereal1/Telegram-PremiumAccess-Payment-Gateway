@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "start:api": "node server.js",
+    "migrate:neon": "node scripts/neon-migrate.cjs",
     "test": "echo \"No tests yet\""
   },
   "repository": {
