@@ -51,5 +51,28 @@ app.get('/user/status/:telegram_id', async (req, res) => {
   res.json({ exists: true, user: result.rows[0] });
 });
 
+app.post('/user/wallet', async (req, res) => {
+  const { initData, wallet_address } = req.body || {};
+
+  if (!wallet_address || typeof wallet_address !== 'string') {
+    return res.status(400).json({ error: 'Missing wallet_address' });
+  }
+
+  const maxAgeSeconds = Number(process.env.TELEGRAM_AUTH_MAX_AGE_SECONDS || '86400');
+  const verify = verifyTelegramData(initData, process.env.BOT_TOKEN, { maxAgeSeconds });
+  if (!verify.ok) return res.status(401).json({ error: 'Invalid Telegram data', reason: verify.reason });
+
+  const user = parseTelegramUser(initData);
+  if (!user?.id) return res.status(400).json({ error: 'Missing Telegram user in initData' });
+
+  const result = await getPool().query(
+    `UPDATE users SET wallet_address = $1 WHERE telegram_id = $2 RETURNING *`,
+    [wallet_address, String(user.id)],
+  );
+  if (result.rows.length === 0) return res.status(404).json({ error: 'User not found. Call /auth/telegram first.' });
+
+  return res.json({ success: true, user: result.rows[0] });
+});
+
 const port = Number(process.env.PORT || 3001);
 app.listen(port, () => console.log(`API listening on http://localhost:${port}`));

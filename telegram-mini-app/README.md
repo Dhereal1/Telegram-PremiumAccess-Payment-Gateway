@@ -34,3 +34,9 @@ Set Vercel environment variables:
 - `BOT_TOKEN`
 - `DATABASE_URL`
 - (optional) `TELEGRAM_AUTH_MAX_AGE_SECONDS`
+
+### Neon table update (wallet)
+
+```sql
+ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_address TEXT;
+```

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { TonConnectButton, useTonAddress } from '@tonconnect/ui-react'
 import './App.css'
 
 function App() {
@@ -7,6 +8,9 @@ function App() {
   const [colorScheme, setColorScheme] = useState(null)
   const [authStatus, setAuthStatus] = useState('idle')
   const [authError, setAuthError] = useState(null)
+  const walletAddress = useTonAddress()
+  const [walletStatus, setWalletStatus] = useState('idle')
+  const [walletError, setWalletError] = useState(null)
 
   const tg = useMemo(() => window.Telegram?.WebApp, [])
 
@@ -60,6 +64,41 @@ function App() {
     }
   }, [tg])
 
+  useEffect(() => {
+    if (!walletAddress) return
+    if (!user?.id) return
+
+    let cancelled = false
+
+    async function run() {
+      try {
+        setWalletStatus('saving')
+        setWalletError(null)
+
+        const resp = await fetch(`/api/user/wallet`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ initData: tg?.initData, wallet_address: walletAddress }),
+        })
+
+        const data = await resp.json().catch(() => null)
+        if (!resp.ok) throw new Error(data?.error || `Save failed (${resp.status})`)
+
+        if (!cancelled) setWalletStatus('saved')
+      } catch (e) {
+        if (!cancelled) {
+          setWalletStatus('error')
+          setWalletError(String(e?.message || e))
+        }
+      }
+    }
+
+    run()
+    return () => {
+      cancelled = true
+    }
+  }, [tg, user?.id, walletAddress])
+
   return (
     <div className="app">
       <header className="header">
@@ -90,6 +129,27 @@ function App() {
           </p>
         )}
       </main>
+
+      <section className="card">
+        <div className="row">
+          <span className="label">Wallet</span>
+          <span className="value">{walletAddress ? 'Connected' : 'Not connected'}</span>
+        </div>
+
+        <div className="walletActions">
+          <TonConnectButton />
+        </div>
+
+        {walletAddress ? (
+          <p className="mono">{walletAddress}</p>
+        ) : (
+          <p className="loading">Connect a TON wallet to continue.</p>
+        )}
+
+        {walletStatus !== 'idle' ? (
+          <p className="loading">Wallet save: {walletStatus}{walletError ? ` • ${walletError}` : ''}</p>
+        ) : null}
+      </section>
 
       {isTelegram && tg?.initData ? (
         <footer className="footer">

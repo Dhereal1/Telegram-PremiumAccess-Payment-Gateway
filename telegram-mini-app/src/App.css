@@ -73,3 +73,18 @@
   display: block;
   margin-top: 6px;
 }
+
+.walletActions {
+  display: flex;
+  justify-content: flex-start;
+  margin: 12px 0;
+}
+
+.mono {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
+  font-size: 12px;
+  word-break: break-all;
+  opacity: 0.95;
+}

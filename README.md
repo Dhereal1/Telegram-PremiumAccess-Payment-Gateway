@@ -70,8 +70,15 @@ CREATE TABLE users (
   username TEXT,
   first_name TEXT,
   last_name TEXT,
+  wallet_address TEXT,
   created_at TIMESTAMP DEFAULT NOW()
 );
+```
+
+If you already created the table, add the wallet column:
+
+```sql
+ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_address TEXT;
 ```
 
 ### Local dev (Express)
