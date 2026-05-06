@@ -2,7 +2,7 @@ import { getDb } from '../_lib/db.mjs'
 import { getWorkerEnv } from '../_lib/worker-env.mjs'
 import { getWorkerLogger } from '../_lib/logger.mjs'
 import { pathToFileURL } from 'node:url'
-import { getTransactions, getTxCursor } from '../../api/_lib/toncenter.js'
+import { getTransactions, getTxCursor } from '../../server/lib/toncenter.js'
 import { enqueuePaymentVerification } from '../producers/enqueuePaymentVerification.mjs'
 
 const env = getWorkerEnv();

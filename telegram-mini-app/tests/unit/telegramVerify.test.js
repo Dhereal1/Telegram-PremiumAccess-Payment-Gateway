@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import crypto from 'crypto'
-import { verifyTelegramData } from '../../api/_lib/telegram.js'
+import { verifyTelegramData } from '../../server/lib/telegram.js'
 
 function signInitData(params, botToken) {
   const urlParams = new URLSearchParams(params)
