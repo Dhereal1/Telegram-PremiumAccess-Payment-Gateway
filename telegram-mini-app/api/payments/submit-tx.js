@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     const txHash = tx?.transaction_id?.hash || tx?.in_msg?.hash || tx?.hash;
     if (!txHash) return res.status(400).json({ error: 'Missing tx hash' });
 
-    const maxAgeSeconds = Number(process.env.TELEGRAM_AUTH_MAX_AGE_SECONDS || '86400');
+    const maxAgeSeconds = 300;
     const verify = verifyTelegramData(initData, process.env.BOT_TOKEN, { maxAgeSeconds });
     if (!verify.ok) return res.status(401).json({ error: 'Invalid Telegram data', reason: verify.reason });
 

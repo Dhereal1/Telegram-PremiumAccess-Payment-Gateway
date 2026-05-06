@@ -34,6 +34,8 @@ async function main() {
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMP;`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS last_payment_at TIMESTAMP;`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_locked BOOLEAN DEFAULT FALSE;`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS last_invite_link TEXT;`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS invite_created_at TIMESTAMP;`,
     `CREATE TABLE IF NOT EXISTS processed_transactions (
       tx_hash TEXT PRIMARY KEY,
       telegram_id TEXT,
@@ -108,6 +110,12 @@ async function main() {
       queue_name TEXT,
       payload JSONB,
       error TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    );`,
+    `CREATE TABLE IF NOT EXISTS admin_actions (
+      id SERIAL PRIMARY KEY,
+      action TEXT,
+      payload JSONB,
       created_at TIMESTAMP DEFAULT NOW()
     );`,
   ];

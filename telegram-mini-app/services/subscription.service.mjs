@@ -24,3 +24,14 @@ export async function unmarkAccessGranted(userId) {
   const pool = getPool()
   await pool.query('UPDATE users SET access_granted = false WHERE id = $1', [userId])
 }
+
+export async function setInviteInfo({ userId, inviteLink }) {
+  const pool = getPool()
+  await pool.query(
+    `UPDATE users
+     SET last_invite_link = $2,
+         invite_created_at = NOW()
+     WHERE id = $1`,
+    [userId, inviteLink],
+  )
+}

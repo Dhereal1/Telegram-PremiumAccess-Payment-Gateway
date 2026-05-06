@@ -9,13 +9,17 @@ import {
   extractTelegramIdFromComment,
   isValidIncomingPayment,
   parseCommentFromTx,
-} from '../api/_lib/toncenter.js';
+} from '../../api/_lib/toncenter.js';
 import { enqueueAccessGrant } from '../producers/enqueueAccessGrant.mjs';
 import { logFailedJob } from '../_lib/failedJobs.mjs';
+import { logEvent } from '../../services/subscriptionEvents.service.mjs';
+import { paymentQueue } from '../queues/paymentQueue.mjs';
+import { startQueueStatsLogger } from '../_lib/queueStats.mjs';
 
 const env = getWorkerEnv();
 const log = getWorkerLogger();
 const pool = getDb();
+startQueueStatsLogger({ logger: log, queueName: 'payment-verification', queue: paymentQueue });
 
 function uuid() {
   return crypto.randomUUID();
@@ -120,6 +124,12 @@ async function processJob(job) {
       }
     }
 
+    await logEvent({
+      userId: String(telegramId),
+      type: 'payment_received',
+      metadata: { txHash: String(txHash), paymentIntentId: String(intentId) },
+    }).catch(() => {});
+
     return { ok: true, status: 'paid', txHash, telegramId, intentId };
   } catch (e) {
     await pool.query('ROLLBACK');
@@ -131,7 +141,7 @@ const worker = new Worker(
   'payment-verification',
   async (job) => {
     const res = await processJob(job);
-    log.info({ jobId: job.id, ...res }, 'verify_payment_done');
+    log.info({ jobId: job.id, queue: 'payment-verification', userId: res.telegramId, paymentIntentId: res.intentId, txHash: res.txHash, ...res }, 'verify_payment_done');
     return res;
   },
   {

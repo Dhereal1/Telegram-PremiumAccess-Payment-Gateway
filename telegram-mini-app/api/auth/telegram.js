@@ -16,7 +16,7 @@ export default async function handler(req, res) {
 
   const initData = body?.initData;
   const botToken = process.env.BOT_TOKEN;
-  const maxAgeSeconds = Number(process.env.TELEGRAM_AUTH_MAX_AGE_SECONDS || '86400');
+  const maxAgeSeconds = 300;
 
   const verify = verifyTelegramData(initData, botToken, { maxAgeSeconds });
   if (!verify.ok) return res.status(401).json({ error: 'Invalid Telegram data', reason: verify.reason });

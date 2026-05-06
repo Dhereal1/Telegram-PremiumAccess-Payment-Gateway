@@ -1,7 +1,7 @@
 import { Queue } from 'bullmq'
 import { connection } from './connection.mjs'
 
-export const accessQueue = new Queue('access-grant', {
+export const expiryQueue = new Queue('expiry', {
   connection,
   limiter: { max: 100, duration: 1000 },
   defaultJobOptions: {
@@ -11,3 +11,4 @@ export const accessQueue = new Queue('access-grant', {
     removeOnFail: false
   }
 })
+

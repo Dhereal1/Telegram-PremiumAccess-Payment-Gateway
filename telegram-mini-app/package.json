@@ -11,6 +11,8 @@
     "worker:ton-listener": "node workers/listeners/tonListener.mjs",
     "worker:verify-payments": "node workers/processors/verifyPaymentWorker.mjs",
     "worker:grant-access": "node workers/processors/grantAccessWorker.mjs",
+    "worker:expiry": "node workers/processors/expiryWorker.mjs",
+    "worker:expiry-scheduler": "node workers/listeners/expiryScheduler.mjs",
     "test": "vitest run"
   },
   "dependencies": {
