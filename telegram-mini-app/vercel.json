@@ -1,7 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/internal/retry-failed",
+      "path": "/api/internal/run-workers",
       "schedule": "*/1 * * * *"
     }
   ]

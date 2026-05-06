@@ -1,8 +1,6 @@
 import { Worker } from 'bullmq'
-import { connection } from '../queues/connection.mjs'
+import { pathToFileURL } from 'node:url'
 import { getWorkerLogger } from '../_lib/logger.mjs'
-import { accessQueue } from '../queues/accessQueue.mjs'
-import { startQueueStatsLogger } from '../_lib/queueStats.mjs'
 
 import { getUserById } from '../../services/user.service.mjs'
 import { markAccessGrantedIfNotExists, setInviteInfo, unmarkAccessGranted } from '../../services/subscription.service.mjs'
@@ -12,64 +10,80 @@ import { logEvent } from '../../services/subscriptionEvents.service.mjs'
 import { AccessGrantJobSchema, parseJob } from '../_lib/jobSchemas.mjs'
 
 const logger = getWorkerLogger()
-startQueueStatsLogger({ logger, queueName: 'access-grant', queue: accessQueue })
 
-const worker = new Worker(
-  'access-grant',
-  async (job) => {
-    const { userId, telegramId, forceRegenerate } = parseJob(AccessGrantJobSchema, job.data || {})
+export async function processAccessGrantJob(job) {
+  const { userId, telegramId, forceRegenerate } = parseJob(AccessGrantJobSchema, job.data || {})
 
-    logger.info({ jobId: job.id, queue: 'access-grant', userId }, 'access_grant_processing')
+  logger.info({ jobId: job.id, queue: 'access-grant', userId }, 'access_grant_processing')
 
-    const user = await getUserById(userId)
-    if (!user) {
-      logger.warn({ jobId: job.id, queue: 'access-grant', userId }, 'access_grant_user_not_found')
-      return
+  const user = await getUserById(userId)
+  if (!user) {
+    logger.warn({ jobId: job.id, queue: 'access-grant', userId }, 'access_grant_user_not_found')
+    return
+  }
+
+  if (!user.payment_status) {
+    logger.warn({ jobId: job.id, queue: 'access-grant', userId }, 'access_grant_not_paid')
+    return
+  }
+
+  // Atomic claim to prevent duplicate invites under concurrency (unless forced regeneration).
+  const claimed = forceRegenerate ? user : await markAccessGrantedIfNotExists(userId)
+  if (!claimed) {
+    logger.info({ jobId: job.id, queue: 'access-grant', userId }, 'access_grant_already_claimed')
+    return
+  }
+
+  try {
+    if (forceRegenerate) {
+      await logEvent({ userId: String(claimed.telegram_id), type: 'invite_regen_requested', metadata: {} }).catch(() => {})
     }
 
-    if (!user.payment_status) {
-      logger.warn({ jobId: job.id, userId }, 'access_grant_not_paid')
-      return
-    }
+    const inviteLink = await createInviteLink({ memberLimit: 1, expireSeconds: 3600 })
+    await setInviteInfo({ userId, inviteLink })
+    await logEvent({ userId: String(claimed.telegram_id), type: 'invite_sent', metadata: { inviteLink } })
 
-    // Atomic claim to prevent duplicate invites under concurrency (unless forced regeneration).
-    const claimed = forceRegenerate ? user : await markAccessGrantedIfNotExists(userId)
-    if (!claimed) {
-      logger.info({ jobId: job.id, queue: 'access-grant', userId }, 'access_grant_already_claimed')
-      return
-    }
+    await sendMessage(telegramId, `✅ Payment confirmed!\n\nJoin here:\n${inviteLink}`)
+    if (!forceRegenerate) await logEvent({ userId: String(claimed.telegram_id), type: 'access_granted', metadata: {} })
+  } catch (e) {
+    await logEvent({ userId: String(claimed.telegram_id), type: 'invite_failed', metadata: { error: String(e?.message || e) } }).catch(() => {})
+    // Roll back claim so retries can attempt again.
+    if (!forceRegenerate) await unmarkAccessGranted(userId)
+    throw e
+  }
 
-    try {
-      if (forceRegenerate) {
-        await logEvent({ userId: String(claimed.telegram_id), type: 'invite_regen_requested', metadata: {} }).catch(() => {})
-      }
+  logger.info({ jobId: job.id, queue: 'access-grant', userId }, 'access_grant_success')
+}
 
-      const inviteLink = await createInviteLink({ memberLimit: 1, expireSeconds: 3600 })
-      await setInviteInfo({ userId, inviteLink })
-      await logEvent({ userId: String(claimed.telegram_id), type: 'invite_sent', metadata: { inviteLink } })
+export async function startGrantAccessWorker() {
+  const [{ connection }, { accessQueue }, { startQueueStatsLogger }] = await Promise.all([
+    import('../queues/connection.mjs'),
+    import('../queues/accessQueue.mjs'),
+    import('../_lib/queueStats.mjs'),
+  ])
 
-      await sendMessage(telegramId, `✅ Payment confirmed!\n\nJoin here:\n${inviteLink}`)
-      if (!forceRegenerate) await logEvent({ userId: String(claimed.telegram_id), type: 'access_granted', metadata: {} })
-    } catch (e) {
-      await logEvent({ userId: String(claimed.telegram_id), type: 'invite_failed', metadata: { error: String(e?.message || e) } }).catch(() => {})
-      // Roll back claim so retries can attempt again.
-      if (!forceRegenerate) await unmarkAccessGranted(userId)
-      throw e
-    }
+  startQueueStatsLogger({ logger, queueName: 'access-grant', queue: accessQueue })
 
-    logger.info({ jobId: job.id, queue: 'access-grant', userId }, 'access_grant_success')
-  },
-  { connection, concurrency: 5 }
-)
+  const worker = new Worker('access-grant', processAccessGrantJob, { connection, concurrency: 5 })
 
-worker.on('failed', (job, err) => {
-  logger.error({ jobId: job?.id, queue: 'access-grant', userId: job?.data?.userId, err: String(err?.message || err) }, 'access_grant_failed')
-  logFailedJob({
-    jobId: job?.id,
-    queue: 'access-grant',
-    payload: job?.data,
-    error: String(err?.message || err)
-  }).catch(() => {})
-})
+  worker.on('failed', (job, err) => {
+    logger.error(
+      { jobId: job?.id, queue: 'access-grant', userId: job?.data?.userId, err: String(err?.message || err) },
+      'access_grant_failed',
+    )
+    logFailedJob({
+      jobId: job?.id,
+      queue: 'access-grant',
+      payload: job?.data,
+      error: String(err?.message || err),
+    }).catch(() => {})
+  })
 
-export default worker
+  logger.info('grantAccessWorker started')
+  return worker
+}
+
+// Only start the long-running worker when executed directly (not when imported by serverless routes).
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await startGrantAccessWorker()
+}

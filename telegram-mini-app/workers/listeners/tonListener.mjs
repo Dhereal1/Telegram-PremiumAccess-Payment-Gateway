@@ -1,6 +1,7 @@
 import { getDb } from '../_lib/db.mjs'
 import { getWorkerEnv } from '../_lib/worker-env.mjs'
 import { getWorkerLogger } from '../_lib/logger.mjs'
+import { pathToFileURL } from 'node:url'
 import { getTransactions, getTxCursor } from '../../api/_lib/toncenter.js'
 import { enqueuePaymentVerification } from '../producers/enqueuePaymentVerification.mjs'
 
@@ -100,4 +101,9 @@ async function main() {
   }
 }
 
-main();
+export { pollOnce };
+
+// Only start the long-running listener when executed directly (not when imported by serverless routes).
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}
