@@ -33,6 +33,7 @@ This deploys:
 Set Vercel environment variables:
 - `BOT_TOKEN`
 - `DATABASE_URL`
+- `WEB_APP_URL` (set this to your **production** Mini App URL, HTTPS)
 - (optional) `TELEGRAM_AUTH_MAX_AGE_SECONDS`
 
 ### Neon table update (wallet)
@@ -46,3 +47,17 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_address TEXT;
 Set these Vercel env vars (Preview + Production) to control payments:
 - `VITE_TON_RECEIVER_ADDRESS` (merchant TON address)
 - `VITE_TON_PRICE_TON` (e.g. `0.1` for testing)
+
+## Bot on Vercel (webhook)
+
+This repo includes a serverless Telegram webhook handler:
+- `POST /api/telegram/webhook` (`telegram-mini-app/api/telegram/webhook.js`)
+
+After deploying, set the webhook (run locally from repo root):
+
+```bash
+node -e "require('dotenv').config(); fetch(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/setWebhook`, {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({url: process.env.WEBHOOK_URL})}).then(r=>r.json()).then(console.log)"
+```
+
+Where `WEBHOOK_URL` should be your deployed URL + `/api/telegram/webhook`, for example:
+`https://<your-prod-domain>/api/telegram/webhook`
