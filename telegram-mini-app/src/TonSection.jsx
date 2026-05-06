@@ -10,6 +10,7 @@ function TonSection({ user, tg }) {
   const [walletError, setWalletError] = useState(null)
   const [payStatus, setPayStatus] = useState('idle')
   const [payError, setPayError] = useState(null)
+  const [activeIntent, setActiveIntent] = useState(null)
 
   const receiverAddress = import.meta.env.VITE_TON_RECEIVER_ADDRESS || 'UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJKZ'
   const tonPriceTon = Number(import.meta.env.VITE_TON_PRICE_TON || '0.1')
@@ -60,9 +61,18 @@ function TonSection({ user, tg }) {
       setPayStatus('sending')
       setPayError(null)
 
-      const telegramId = String(user?.id ?? tg?.initDataUnsafe?.user?.id ?? '')
-      const timestamp = Date.now()
-      const comment = `tp:${telegramId}|ts:${timestamp}`
+      // Create payment intent first (deterministic matching)
+      const intentResp = await fetch('/api/payment-intents/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg?.initData }),
+      })
+      const intentData = await intentResp.json().catch(() => null)
+      if (!intentResp.ok) throw new Error(intentData?.error || `Failed to create payment intent (${intentResp.status})`)
+
+      setActiveIntent(intentData)
+
+      const comment = intentData.reference
 
       const payloadCell = beginCell().storeUint(0, 32).storeStringTail(comment).endCell()
       const payloadBase64 = payloadCell.toBoc().toString('base64')
@@ -71,8 +81,8 @@ function TonSection({ user, tg }) {
         validUntil: Math.floor(Date.now() / 1000) + 600,
         messages: [
           {
-            address: receiverAddress,
-            amount: toNano(tonPriceTon).toString(),
+            address: intentData.receiverAddress || receiverAddress,
+            amount: toNano(Number(intentData.expectedAmountTon || tonPriceTon)).toString(),
             payload: payloadBase64,
           },
         ],
@@ -124,10 +134,14 @@ function TonSection({ user, tg }) {
         </p>
         {payError ? <p className="loading">Error: {payError}</p> : null}
         {payStatus === 'sent' ? <p className="loading">Payment request sent. Waiting for confirmation…</p> : null}
+        {activeIntent?.intentId ? (
+          <p className="loading">
+            Intent: <span className="mono">{activeIntent.intentId}</span>
+          </p>
+        ) : null}
       </section>
     </>
   )
 }
 
 export default TonSection
-

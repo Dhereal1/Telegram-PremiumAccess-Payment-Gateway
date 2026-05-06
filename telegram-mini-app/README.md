@@ -38,6 +38,7 @@ Set Vercel environment variables:
 - (optional) `TELEGRAM_AUTH_MAX_AGE_SECONDS`
 - (optional) `PG_POOL_MAX`, `PG_IDLE_TIMEOUT_MS`, `PG_CONN_TIMEOUT_MS`
 - (optional) `CRON_SECRET` (required only if you want to trigger `/api/cron/*` manually)
+- `REDIS_URL` (required for queue/workers)
 
 ### Neon table update (wallet)
 
@@ -85,6 +86,23 @@ Vercel env vars required:
 - (optional) `TON_API_KEY` (recommended)
 - (optional) `TON_TX_PAGE_LIMIT` (default `50`)
 - (optional) `TON_TX_MAX_PAGES` (default `8`)
+
+## Queue + Workers (production path)
+
+This repo now supports an async queue architecture (BullMQ + Redis):
+- `payment_verification_queue` processed by `workers/verifyPaymentWorker.mjs`
+- TON listener enqueuer: `workers/tonListener.mjs`
+
+Run locally (in separate terminals):
+
+```bash
+npm run worker:ton-listener
+npm run worker:verify-payments
+```
+
+Deploy note:
+- Vercel serverless functions are not a good fit for long-running workers.
+- Deploy workers as a separate Node service (Fly.io / Render / Railway) with the same env vars.
 
 ## Step 7 (Telegram access control)
 
