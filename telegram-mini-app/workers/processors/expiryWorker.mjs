@@ -6,6 +6,7 @@ import { logEvent } from '../../services/subscriptionEvents.service.mjs'
 import { logFailedJob } from '../_lib/failedJobs.mjs'
 import { expiryQueue } from '../queues/expiryQueue.mjs'
 import { startQueueStatsLogger } from '../_lib/queueStats.mjs'
+import { ExpiryJobSchema, parseJob } from '../_lib/jobSchemas.mjs'
 
 const logger = getWorkerLogger()
 const pool = getDb()
@@ -41,8 +42,9 @@ async function expireBatch(limit) {
 const worker = new Worker(
   'expiry',
   async (job) => {
-    const limit = Number(job.data?.limit || 100)
-    const expired = await expireBatch(limit)
+    const { limit } = parseJob(ExpiryJobSchema, job.data || {})
+    const batchLimit = Number(limit || 100)
+    const expired = await expireBatch(batchLimit)
     logger.info({ jobId: job.id, queue: 'expiry', expired }, 'expiry_done')
     return { expired }
   },

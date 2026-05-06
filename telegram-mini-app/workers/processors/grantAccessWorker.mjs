@@ -9,6 +9,7 @@ import { markAccessGrantedIfNotExists, setInviteInfo, unmarkAccessGranted } from
 import { createInviteLink, sendMessage } from '../../services/telegram.service.mjs'
 import { logFailedJob } from '../_lib/failedJobs.mjs'
 import { logEvent } from '../../services/subscriptionEvents.service.mjs'
+import { AccessGrantJobSchema, parseJob } from '../_lib/jobSchemas.mjs'
 
 const logger = getWorkerLogger()
 startQueueStatsLogger({ logger, queueName: 'access-grant', queue: accessQueue })
@@ -16,7 +17,7 @@ startQueueStatsLogger({ logger, queueName: 'access-grant', queue: accessQueue })
 const worker = new Worker(
   'access-grant',
   async (job) => {
-    const { userId, telegramId, forceRegenerate } = job.data || {}
+    const { userId, telegramId, forceRegenerate } = parseJob(AccessGrantJobSchema, job.data || {})
 
     logger.info({ jobId: job.id, queue: 'access-grant', userId }, 'access_grant_processing')
 

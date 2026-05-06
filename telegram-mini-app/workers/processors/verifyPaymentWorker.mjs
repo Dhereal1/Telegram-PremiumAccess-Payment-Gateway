@@ -15,6 +15,7 @@ import { logFailedJob } from '../_lib/failedJobs.mjs';
 import { logEvent } from '../../services/subscriptionEvents.service.mjs';
 import { paymentQueue } from '../queues/paymentQueue.mjs';
 import { startQueueStatsLogger } from '../_lib/queueStats.mjs';
+import { VerifyPaymentJobSchema, parseJob } from '../_lib/jobSchemas.mjs';
 
 const env = getWorkerEnv();
 const log = getWorkerLogger();
@@ -26,7 +27,7 @@ function uuid() {
 }
 
 async function processJob(job) {
-  const tx = job.data?.tx;
+  const { tx } = parseJob(VerifyPaymentJobSchema, job.data || {});
   if (!tx) return { ok: false, reason: 'Missing tx' };
 
   const txHash = tx?.transaction_id?.hash || tx?.in_msg?.hash || tx?.hash;

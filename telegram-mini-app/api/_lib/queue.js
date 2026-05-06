@@ -3,6 +3,7 @@ import IORedis from 'ioredis';
 import { requireRedisUrl } from './env.js';
 
 let connection;
+let queues;
 
 function getConnection() {
   if (connection) return connection;
@@ -15,10 +16,12 @@ function getConnection() {
 }
 
 export function getQueues() {
+  if (queues) return queues;
   const connection = getConnection();
-  return {
+  queues = {
     paymentVerificationQueue: new Queue('payment-verification', { connection }),
     accessGrantQueue: new Queue('access-grant', { connection }),
     notificationQueue: new Queue('notification', { connection }),
   };
+  return queues;
 }

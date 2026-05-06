@@ -2,7 +2,7 @@ import { getPool } from '../_lib/db.js'
 import { setCors, readJson } from '../_lib/http.js'
 import { verifyTelegramData, parseTelegramUser } from '../_lib/telegram.js'
 import { parseJson, TelegramInitDataSchema } from '../_lib/validation.js'
-import { accessQueue } from '../../workers/queues/accessQueue.mjs'
+import { getQueues } from '../_lib/queue.js'
 
 export default async function handler(req, res) {
   setCors(res)
@@ -29,7 +29,8 @@ export default async function handler(req, res) {
   if (!u.rows[0].payment_status) return res.status(403).json({ error: 'Not paid' })
 
   const userId = u.rows[0].id
-  await accessQueue.add(
+  const { accessGrantQueue } = getQueues()
+  await accessGrantQueue.add(
     'regenerate-invite',
     { userId, telegramId: String(tgUser.id), forceRegenerate: true },
     { jobId: `regen:${userId}:${Date.now()}` },
