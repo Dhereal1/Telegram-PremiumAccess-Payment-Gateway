@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { TonConnectButton, useTonAddress } from '@tonconnect/ui-react'
+import { TonConnectButton, useTonAddress, useTonConnectUI, useTonWallet } from '@tonconnect/ui-react'
+import { beginCell, toNano } from '@ton/core'
 import './App.css'
 
 function App() {
@@ -9,10 +10,17 @@ function App() {
   const [authStatus, setAuthStatus] = useState('idle')
   const [authError, setAuthError] = useState(null)
   const walletAddress = useTonAddress()
+  const wallet = useTonWallet()
+  const [tonConnectUI] = useTonConnectUI()
   const [walletStatus, setWalletStatus] = useState('idle')
   const [walletError, setWalletError] = useState(null)
+  const [payStatus, setPayStatus] = useState('idle')
+  const [payError, setPayError] = useState(null)
 
   const tg = useMemo(() => window.Telegram?.WebApp, [])
+
+  const receiverAddress = import.meta.env.VITE_TON_RECEIVER_ADDRESS || 'UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJKZ'
+  const tonPriceTon = Number(import.meta.env.VITE_TON_PRICE_TON || '0.1')
 
   useEffect(() => {
     if (!tg) return
@@ -99,6 +107,50 @@ function App() {
     }
   }, [tg, user?.id, walletAddress])
 
+  const handlePayment = async () => {
+    if (!walletAddress) {
+      setPayStatus('error')
+      setPayError('Connect wallet first')
+      return
+    }
+
+    if (!tg?.initDataUnsafe?.user?.id && !user?.id) {
+      setPayStatus('error')
+      setPayError('Telegram user not loaded')
+      return
+    }
+
+    try {
+      setPayStatus('sending')
+      setPayError(null)
+
+      const telegramId = String(user?.id ?? tg.initDataUnsafe?.user?.id)
+      const timestamp = Date.now()
+      const comment = `tp:${telegramId}|ts:${timestamp}`
+
+      const payloadCell = beginCell().storeUint(0, 32).storeStringTail(comment).endCell()
+      const payloadBase64 = payloadCell.toBoc().toString('base64')
+
+      const transaction = {
+        validUntil: Math.floor(Date.now() / 1000) + 600,
+        messages: [
+          {
+            address: receiverAddress,
+            amount: toNano(tonPriceTon).toString(),
+            payload: payloadBase64,
+          },
+        ],
+        ...(wallet?.account?.address ? { from: wallet.account.address } : {}),
+      }
+
+      await tonConnectUI.sendTransaction(transaction)
+      setPayStatus('sent')
+    } catch (e) {
+      setPayStatus('error')
+      setPayError(String(e?.message || e))
+    }
+  }
+
   return (
     <div className="app">
       <header className="header">
@@ -149,6 +201,23 @@ function App() {
         {walletStatus !== 'idle' ? (
           <p className="loading">Wallet save: {walletStatus}{walletError ? ` • ${walletError}` : ''}</p>
         ) : null}
+      </section>
+
+      <section className="card">
+        <div className="row">
+          <span className="label">Payment</span>
+          <span className="value">{payStatus === 'idle' ? 'Ready' : payStatus}</span>
+        </div>
+
+        <button className="payBtn" onClick={handlePayment} disabled={!walletAddress || payStatus === 'sending'}>
+          {payStatus === 'sending' ? 'Sending…' : `Pay ${tonPriceTon} TON`}
+        </button>
+
+        <p className="loading">
+          Receiver: <span className="mono">{receiverAddress}</span>
+        </p>
+        {payError ? <p className="loading">Error: {payError}</p> : null}
+        {payStatus === 'sent' ? <p className="loading">Payment request sent. Waiting for confirmation…</p> : null}
       </section>
 
       {isTelegram && tg?.initData ? (

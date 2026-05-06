@@ -40,3 +40,9 @@ Set Vercel environment variables:
 ```sql
 ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_address TEXT;
 ```
+
+## Step 5 (TON payment)
+
+Set these Vercel env vars (Preview + Production) to control payments:
+- `VITE_TON_RECEIVER_ADDRESS` (merchant TON address)
+- `VITE_TON_PRICE_TON` (e.g. `0.1` for testing)

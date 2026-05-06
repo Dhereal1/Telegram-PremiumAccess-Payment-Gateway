@@ -88,3 +88,19 @@
   word-break: break-all;
   opacity: 0.95;
 }
+
+.payBtn {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--tg-hint-color) 35%, transparent 65%);
+  background: color-mix(in srgb, var(--tg-text-color) 12%, transparent 88%);
+  color: var(--tg-text-color);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.payBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
