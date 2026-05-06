@@ -10,6 +10,11 @@ export default async function handler(req, res) {
   const auth = requireCronAuth(req);
   if (!auth.ok) return res.status(401).json({ error: 'Unauthorized' });
 
+  // This legacy endpoint does direct DB + Telegram side effects. Prefer `/api/internal/run-workers`.
+  if (process.env.ENABLE_LEGACY_CRON !== '1') {
+    return res.status(410).json({ error: 'Deprecated. Use /api/internal/run-workers instead.' });
+  }
+
   if (!process.env.BOT_TOKEN) return res.status(500).json({ error: 'Missing BOT_TOKEN' });
   if (!process.env.CHANNEL_ID) return res.status(500).json({ error: 'Missing CHANNEL_ID' });
 
@@ -58,3 +63,4 @@ export default async function handler(req, res) {
 
   return res.json({ ok: true, scanned: users.rows.length, granted, skipped, errors });
 }
+

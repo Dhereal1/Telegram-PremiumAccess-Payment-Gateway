@@ -37,7 +37,7 @@ Set Vercel environment variables:
 - (optional) `TELEGRAM_WEBHOOK_SECRET` (recommended)
 - (optional) `TELEGRAM_AUTH_MAX_AGE_SECONDS`
 - (optional) `PG_POOL_MAX`, `PG_IDLE_TIMEOUT_MS`, `PG_CONN_TIMEOUT_MS`
-- (optional) `CRON_SECRET` (required only if you want to trigger `/api/cron/*` manually)
+- (optional) `CRON_SECRET` (required only if you want to trigger internal cron endpoints manually)
 - `REDIS_URL` (required for queue/workers)
 
 ### Neon table update (wallet)
@@ -76,8 +76,18 @@ CREATE TABLE IF NOT EXISTS verifier_state (
 );
 ```
 
-Serverless polling endpoint (trigger via Vercel Cron every 15–30s/min):
-- `GET/POST /api/cron/verify-payments` (`telegram-mini-app/api/cron/verify-payments.js`)
+## $0 Worker Mode (Vercel Cron “burst runner”)
+
+If you don’t have always-on workers yet, this repo supports a **cron-driven burst runner**:
+- Vercel Cron calls `GET/POST /api/internal/run-workers` every minute
+- It polls TON, enqueues verification jobs, processes small batches from Redis queues, then exits (timeout-safe)
+
+Tune batch size/time via env vars:
+- `RUN_WORKERS_MAX_MS` (default `25000`)
+- `RUN_WORKERS_MAX_TON_ENQUEUE` (default `25`)
+- `RUN_WORKERS_MAX_VERIFY` (default `15`)
+- `RUN_WORKERS_MAX_ACCESS` (default `10`)
+- `RUN_WORKERS_MAX_EXPIRY` (default `2`)
 
 Vercel env vars required:
 - `TON_RECEIVER_ADDRESS` (same as your merchant address)
@@ -102,8 +112,8 @@ npm run worker:verify-payments
 ```
 
 Deploy note:
-- Vercel serverless functions are not a good fit for long-running workers.
-- Deploy workers as a separate Node service (Fly.io / Render / Railway) with the same env vars.
+- The preferred production setup is **always-on workers** (separate process) with the same env vars.
+- The $0 cron runner is fine for early-stage volume, but isn’t real-time.
 
 ## Step 7 (Telegram access control)
 

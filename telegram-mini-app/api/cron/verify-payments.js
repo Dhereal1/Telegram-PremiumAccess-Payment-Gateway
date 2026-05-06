@@ -17,6 +17,11 @@ export default async function handler(req, res) {
   const auth = requireCronAuth(req);
   if (!auth.ok) return res.status(401).json({ error: 'Unauthorized' });
 
+  // This legacy endpoint processes TON + DB work directly. Prefer `/api/internal/run-workers`.
+  if (process.env.ENABLE_LEGACY_CRON !== '1') {
+    return res.status(410).json({ error: 'Deprecated. Use /api/internal/run-workers instead.' });
+  }
+
   const receiverAddress = process.env.TON_RECEIVER_ADDRESS;
   const priceTon = Number(process.env.TON_PRICE_TON || '0.1');
   const apiUrl = process.env.TON_API_URL || 'https://toncenter.com/api/v2';
