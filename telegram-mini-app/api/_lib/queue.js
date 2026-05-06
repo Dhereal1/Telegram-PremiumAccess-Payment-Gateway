@@ -17,8 +17,8 @@ function getConnection() {
 export function getQueues() {
   const connection = getConnection();
   return {
-    paymentVerificationQueue: new Queue('payment_verification_queue', { connection }),
-    accessGrantQueue: new Queue('access_grant_queue', { connection }),
-    notificationQueue: new Queue('notification_queue', { connection }),
+    paymentVerificationQueue: new Queue('payment-verification', { connection }),
+    accessGrantQueue: new Queue('access-grant', { connection }),
+    notificationQueue: new Queue('notification', { connection }),
   };
 }

@@ -1,6 +1,6 @@
 import { getPool } from '../_lib/db.js';
 import { requireCronAuth, setCors } from '../_lib/http.js';
-import { createInviteLink, sendAccessMessage } from '../_lib/telegram-bot.js';
+import { createInviteLink, sendMessage } from '../../services/telegram.service.mjs';
 
 export default async function handler(req, res) {
   setCors(res);
@@ -10,10 +10,8 @@ export default async function handler(req, res) {
   const auth = requireCronAuth(req);
   if (!auth.ok) return res.status(401).json({ error: 'Unauthorized' });
 
-  const botToken = process.env.BOT_TOKEN;
-  const channelId = process.env.CHANNEL_ID;
-  if (!botToken) return res.status(500).json({ error: 'Missing BOT_TOKEN' });
-  if (!channelId) return res.status(500).json({ error: 'Missing CHANNEL_ID' });
+  if (!process.env.BOT_TOKEN) return res.status(500).json({ error: 'Missing BOT_TOKEN' });
+  if (!process.env.CHANNEL_ID) return res.status(500).json({ error: 'Missing CHANNEL_ID' });
 
   const pool = getPool();
 
@@ -47,8 +45,8 @@ export default async function handler(req, res) {
     }
 
     try {
-      const inviteLink = await createInviteLink({ botToken, channelId, memberLimit: 1, expireSeconds: 3600 });
-      await sendAccessMessage({ botToken, telegramId, inviteLink });
+      const inviteLink = await createInviteLink({ memberLimit: 1, expireSeconds: 3600 });
+      await sendMessage(telegramId, `✅ Payment confirmed!\n\n🎉 Join your premium access:\n${inviteLink}`);
 
       await pool.query('UPDATE users SET access_granted = true WHERE telegram_id = $1', [String(telegramId)]);
       granted++;

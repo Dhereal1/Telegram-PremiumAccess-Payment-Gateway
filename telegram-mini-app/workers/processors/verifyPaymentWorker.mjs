@@ -1,22 +1,20 @@
 import { Worker } from 'bullmq';
 import crypto from 'crypto';
-import { getRedis } from './_lib/redis.mjs';
-import { getDb } from './_lib/db.mjs';
-import { getWorkerEnv } from './_lib/worker-env.mjs';
-import { getWorkerLogger } from './_lib/logger.mjs';
+import { connection } from '../queues/connection.mjs';
+import { getDb } from '../_lib/db.mjs';
+import { getWorkerEnv } from '../_lib/worker-env.mjs';
+import { getWorkerLogger } from '../_lib/logger.mjs';
 import {
   extractPaymentIntentIdFromComment,
   extractTelegramIdFromComment,
   isValidIncomingPayment,
   parseCommentFromTx,
 } from '../api/_lib/toncenter.js';
-import { Queue } from 'bullmq';
+import { enqueueAccessGrant } from '../producers/enqueueAccessGrant.mjs';
 
 const env = getWorkerEnv();
 const log = getWorkerLogger();
-const connection = getRedis();
 const pool = getDb();
-const accessGrantQueue = new Queue('access_grant_queue', { connection });
 
 function uuid() {
   return crypto.randomUUID();
@@ -111,12 +109,13 @@ async function processJob(job) {
     await pool.query('COMMIT');
 
     // Event-driven access granting
+    // Event-driven access granting (queue-level idempotency)
     if (env.CHANNEL_ID && user.rows[0].access_granted !== true) {
-      await accessGrantQueue.add(
-        'grant_access',
-        { telegramId: String(telegramId) },
-        { jobId: `grant:${String(telegramId)}`, attempts: 10, backoff: { type: 'exponential', delay: 10000 } },
-      );
+      // Worker doesn't currently return user.id; fetch it in one query
+      const u = await pool.query('SELECT id, telegram_id FROM users WHERE telegram_id=$1', [String(telegramId)]);
+      if (u.rows.length) {
+        await enqueueAccessGrant({ userId: u.rows[0].id, telegramId: u.rows[0].telegram_id });
+      }
     }
 
     return { ok: true, status: 'paid', txHash, telegramId, intentId };
@@ -127,7 +126,7 @@ async function processJob(job) {
 }
 
 const worker = new Worker(
-  'payment_verification_queue',
+  'payment-verification',
   async (job) => {
     const res = await processJob(job);
     log.info({ jobId: job.id, ...res }, 'verify_payment_done');

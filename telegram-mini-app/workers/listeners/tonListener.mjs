@@ -1,16 +1,12 @@
-import { Queue } from 'bullmq';
-import { getRedis } from './_lib/redis.mjs';
-import { getDb } from './_lib/db.mjs';
-import { getWorkerEnv } from './_lib/worker-env.mjs';
-import { getWorkerLogger } from './_lib/logger.mjs';
+import { getDb } from '../_lib/db.mjs';
+import { getWorkerEnv } from '../_lib/worker-env.mjs';
+import { getWorkerLogger } from '../_lib/logger.mjs';
 import { getTransactions, getTxCursor } from '../api/_lib/toncenter.js';
+import { enqueuePaymentVerification } from '../producers/enqueuePaymentVerification.mjs';
 
 const env = getWorkerEnv();
 const log = getWorkerLogger();
-const connection = getRedis();
 const pool = getDb();
-
-const paymentVerificationQueue = new Queue('payment_verification_queue', { connection });
 
 async function getCheckpoint() {
   const prefix = `ton:${env.TON_RECEIVER_ADDRESS}:`;
@@ -87,17 +83,7 @@ async function pollOnce() {
     const txHash = tx?.transaction_id?.hash || tx?.in_msg?.hash || tx?.hash;
     if (!txHash) continue;
 
-    await paymentVerificationQueue.add(
-      'verify_payment',
-      { tx },
-      {
-        jobId: `tx:${String(txHash)}`,
-        attempts: 8,
-        backoff: { type: 'exponential', delay: 5000 },
-        removeOnComplete: 1000,
-        removeOnFail: 5000,
-      },
-    );
+    await enqueuePaymentVerification({ tx });
     enqueued++;
   }
 
@@ -123,4 +109,3 @@ async function main() {
 }
 
 main();
-

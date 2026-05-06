@@ -90,8 +90,9 @@ Vercel env vars required:
 ## Queue + Workers (production path)
 
 This repo now supports an async queue architecture (BullMQ + Redis):
-- `payment_verification_queue` processed by `workers/verifyPaymentWorker.mjs`
-- TON listener enqueuer: `workers/tonListener.mjs`
+- `payment-verification` processed by `workers/processors/verifyPaymentWorker.mjs`
+- `access-grant` processed by `workers/processors/grantAccessWorker.mjs`
+- TON listener enqueuer: `workers/listeners/tonListener.mjs`
 
 Run locally (in separate terminals):
 

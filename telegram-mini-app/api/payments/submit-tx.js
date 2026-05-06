@@ -11,7 +11,7 @@ const log = getLogger();
 
 const BodySchema = z.object({
   initData: z.string().min(1),
-  txHash: z.string().min(1),
+  tx: z.any(),
 });
 
 export default async function handler(req, res) {
@@ -24,7 +24,9 @@ export default async function handler(req, res) {
 
   try {
     const body = await readJson(req);
-    const { initData, txHash } = parseJson(body, BodySchema);
+    const { initData, tx } = parseJson(body, BodySchema);
+    const txHash = tx?.transaction_id?.hash || tx?.in_msg?.hash || tx?.hash;
+    if (!txHash) return res.status(400).json({ error: 'Missing tx hash' });
 
     const maxAgeSeconds = Number(process.env.TELEGRAM_AUTH_MAX_AGE_SECONDS || '86400');
     const verify = verifyTelegramData(initData, process.env.BOT_TOKEN, { maxAgeSeconds });
@@ -39,8 +41,8 @@ export default async function handler(req, res) {
 
     const { paymentVerificationQueue } = getQueues();
     await paymentVerificationQueue.add(
-      'verify_by_hash',
-      { txHash: String(txHash) },
+      'verify-payment',
+      { tx },
       { jobId: `tx:${String(txHash)}`, attempts: 8, backoff: { type: 'exponential', delay: 5000 } },
     );
 
@@ -52,4 +54,3 @@ export default async function handler(req, res) {
     return res.status(statusCode).json({ error: 'Internal error' });
   }
 }
-

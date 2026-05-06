@@ -7,7 +7,7 @@ import {
   isValidIncomingPayment,
   parseCommentFromTx,
 } from '../_lib/toncenter.js';
-import { createInviteLink, sendAccessMessage } from '../_lib/telegram-bot.js';
+import { createInviteLink, sendMessage } from '../../services/telegram.service.mjs';
 
 export default async function handler(req, res) {
   setCors(res);
@@ -149,8 +149,8 @@ export default async function handler(req, res) {
       try {
         const row = await pool.query('SELECT access_granted FROM users WHERE telegram_id = $1', [String(telegramId)]);
         if (row.rows.length && row.rows[0].access_granted !== true) {
-          const inviteLink = await createInviteLink({ botToken, channelId, memberLimit: 1, expireSeconds: 3600 });
-          await sendAccessMessage({ botToken, telegramId: String(telegramId), inviteLink });
+          const inviteLink = await createInviteLink({ memberLimit: 1, expireSeconds: 3600 });
+          await sendMessage(String(telegramId), `✅ Payment confirmed!\n\n🎉 Join your premium access:\n${inviteLink}`);
           await pool.query('UPDATE users SET access_granted = true WHERE telegram_id = $1', [String(telegramId)]);
           accessGranted++;
         }

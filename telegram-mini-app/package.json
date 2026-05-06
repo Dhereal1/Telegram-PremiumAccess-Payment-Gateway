@@ -8,9 +8,9 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "worker:ton-listener": "node workers/tonListener.mjs",
-    "worker:verify-payments": "node workers/verifyPaymentWorker.mjs",
-    "worker:grant-access": "node workers/grantAccessWorker.mjs",
+    "worker:ton-listener": "node workers/listeners/tonListener.mjs",
+    "worker:verify-payments": "node workers/processors/verifyPaymentWorker.mjs",
+    "worker:grant-access": "node workers/processors/grantAccessWorker.mjs",
     "test": "vitest run"
   },
   "dependencies": {
