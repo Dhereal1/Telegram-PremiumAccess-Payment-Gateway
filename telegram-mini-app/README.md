@@ -67,6 +67,12 @@ CREATE TABLE IF NOT EXISTS processed_transactions (
   reason TEXT,
   created_at TIMESTAMP DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS verifier_state (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TIMESTAMP DEFAULT NOW()
+);
 ```
 
 Serverless polling endpoint (trigger via Vercel Cron every 15–30s/min):
@@ -77,6 +83,8 @@ Vercel env vars required:
 - `TON_PRICE_TON` (minimum TON to accept, e.g. `0.1` for testing)
 - (optional) `TON_API_URL` (default `https://toncenter.com/api/v2`)
 - (optional) `TON_API_KEY` (recommended)
+- (optional) `TON_TX_PAGE_LIMIT` (default `50`)
+- (optional) `TON_TX_MAX_PAGES` (default `8`)
 
 ## Step 7 (Telegram access control)
 

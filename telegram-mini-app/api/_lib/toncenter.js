@@ -91,13 +91,19 @@ export function isValidIncomingPayment(tx, { receiverAddress, minTon }) {
   return { ok: true };
 }
 
-export async function getTransactions({ apiUrl, apiKey, address, limit = 20 }) {
+export async function getTransactions({ apiUrl, apiKey, address, limit = 20, lt, hash }) {
   const url = `${apiUrl.replace(/\\/$/, '')}/getTransactions`;
   const res = await axios.get(url, {
-    params: { address, limit },
+    params: { address, limit, ...(lt ? { lt } : {}), ...(hash ? { hash } : {}) },
     headers: apiKey ? { 'X-API-Key': apiKey } : undefined,
     timeout: 15000,
   });
 
   return res.data?.result || [];
+}
+
+export function getTxCursor(tx) {
+  const cur = tx?.transaction_id;
+  if (!cur?.lt || !cur?.hash) return null;
+  return { lt: String(cur.lt), hash: String(cur.hash) };
 }

@@ -3,6 +3,7 @@ import { requireCronAuth, setCors } from '../_lib/http.js';
 import {
   extractTelegramIdFromComment,
   getTransactions,
+  getTxCursor,
   isValidIncomingPayment,
   parseCommentFromTx,
 } from '../_lib/toncenter.js';
@@ -27,7 +28,55 @@ export default async function handler(req, res) {
 
   const pool = getPool();
 
-  const txs = await getTransactions({ apiUrl, apiKey, address: receiverAddress, limit: 20 });
+  const stateKeyPrefix = `ton:${receiverAddress}:`;
+  const lastLtRow = await pool.query('SELECT value FROM verifier_state WHERE key = $1', [`${stateKeyPrefix}last_lt`]);
+  const lastHashRow = await pool.query('SELECT value FROM verifier_state WHERE key = $1', [`${stateKeyPrefix}last_hash`]);
+  const lastLt = lastLtRow.rows[0]?.value || null;
+  const lastHash = lastHashRow.rows[0]?.value || null;
+
+  const pageLimit = Number(process.env.TON_TX_PAGE_LIMIT || '50');
+  const maxPages = Number(process.env.TON_TX_MAX_PAGES || '8');
+
+  const collected = [];
+  let pageLt = null;
+  let pageHash = null;
+
+  for (let page = 0; page < maxPages; page++) {
+    const pageTxs = await getTransactions({
+      apiUrl,
+      apiKey,
+      address: receiverAddress,
+      limit: pageLimit,
+      ...(pageLt && pageHash ? { lt: pageLt, hash: pageHash } : {}),
+    });
+
+    if (!Array.isArray(pageTxs) || pageTxs.length === 0) break;
+
+    let slice = pageTxs;
+    if (lastLt && lastHash) {
+      const idx = pageTxs.findIndex((t) => t?.transaction_id?.lt === lastLt && t?.transaction_id?.hash === lastHash);
+      if (idx >= 0) {
+        slice = pageTxs.slice(0, idx);
+        collected.push(...slice);
+        break;
+      }
+    }
+
+    collected.push(...slice);
+
+    // Prepare next page cursor (oldest tx in this page)
+    const lastTx = pageTxs[pageTxs.length - 1];
+    const cursor = getTxCursor(lastTx);
+    if (!cursor) break;
+    pageLt = cursor.lt;
+    pageHash = cursor.hash;
+
+    if (pageTxs.length < pageLimit) break;
+  }
+
+  // TON Center returns newest first; process oldest -> newest
+  const txs = collected.slice().reverse();
+  const newestSeen = collected.length ? getTxCursor(collected[0]) : null;
 
   let processed = 0;
   let confirmed = 0;
@@ -109,6 +158,22 @@ export default async function handler(req, res) {
         // ignore and allow the dedicated grant-access cron to retry
       }
     }
+  }
+
+  // Update checkpoint to the newest tx we have seen (even if ignored), to avoid re-fetching it.
+  if (newestSeen?.lt && newestSeen?.hash) {
+    await pool.query(
+      `INSERT INTO verifier_state (key, value)
+       VALUES ($1, $2)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+      [`${stateKeyPrefix}last_lt`, newestSeen.lt],
+    );
+    await pool.query(
+      `INSERT INTO verifier_state (key, value)
+       VALUES ($1, $2)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+      [`${stateKeyPrefix}last_hash`, newestSeen.hash],
+    );
   }
 
   return res.json({ ok: true, processed, confirmed, accessGranted, skipped, receiverAddress, priceTon });

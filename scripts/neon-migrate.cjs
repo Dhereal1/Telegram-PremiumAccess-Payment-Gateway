@@ -33,6 +33,11 @@ async function main() {
       reason TEXT,
       created_at TIMESTAMP DEFAULT NOW()
     );`,
+    `CREATE TABLE IF NOT EXISTS verifier_state (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TIMESTAMP DEFAULT NOW()
+    );`,
   ];
 
   try {

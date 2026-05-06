@@ -103,6 +103,16 @@ CREATE TABLE IF NOT EXISTS processed_transactions (
 );
 ```
 
+Create verifier state table (TON pagination checkpointing):
+
+```sql
+CREATE TABLE IF NOT EXISTS verifier_state (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
 ### Local dev (Express)
 
 ```bash
