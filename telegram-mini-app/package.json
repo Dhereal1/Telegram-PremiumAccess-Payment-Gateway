@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "worker:ton-listener": "node workers/tonListener.mjs",
     "worker:verify-payments": "node workers/verifyPaymentWorker.mjs",
+    "worker:grant-access": "node workers/grantAccessWorker.mjs",
     "test": "vitest run"
   },
   "dependencies": {

@@ -5,6 +5,7 @@ import { getLogger } from '../_lib/log.js';
 import { getRequestId } from '../_lib/request.js';
 import { parseJson, TelegramInitDataSchema } from '../_lib/validation.js';
 import { verifyTelegramData, parseTelegramUser } from '../_lib/telegram.js';
+import { ipKey, rateLimit } from '../_lib/rate-limit.js';
 
 const log = getLogger();
 
@@ -17,6 +18,14 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
+    // Rate limit per IP to reduce intent-spam
+    try {
+      const rl = await rateLimit({ key: `pi:${ipKey(req)}`, limit: 30, windowSeconds: 60 });
+      if (!rl.ok) return res.status(429).json({ error: 'Too many requests' });
+    } catch {
+      // If REDIS_URL not set, skip rate limiting (dev)
+    }
+
     const body = await readJson(req);
     const { initData } = parseJson(body, TelegramInitDataSchema);
 
@@ -59,4 +68,3 @@ export default async function handler(req, res) {
     return res.status(statusCode).json({ error: 'Internal error' });
   }
 }
-

@@ -1,13 +1,13 @@
 import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
-import { getEnv } from './env.js';
+import { requireRedisUrl } from './env.js';
 
 let connection;
 
 function getConnection() {
   if (connection) return connection;
-  const env = getEnv();
-  connection = new IORedis(env.REDIS_URL, {
+  const redisUrl = requireRedisUrl();
+  connection = new IORedis(redisUrl, {
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
   });
@@ -22,4 +22,3 @@ export function getQueues() {
     notificationQueue: new Queue('notification_queue', { connection }),
   };
 }
-

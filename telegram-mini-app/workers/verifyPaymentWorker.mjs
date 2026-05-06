@@ -10,12 +10,13 @@ import {
   isValidIncomingPayment,
   parseCommentFromTx,
 } from '../api/_lib/toncenter.js';
-import { createInviteLink, sendAccessMessage } from '../api/_lib/telegram-bot.js';
+import { Queue } from 'bullmq';
 
 const env = getWorkerEnv();
 const log = getWorkerLogger();
 const connection = getRedis();
 const pool = getDb();
+const accessGrantQueue = new Queue('access_grant_queue', { connection });
 
 function uuid() {
   return crypto.randomUUID();
@@ -109,20 +110,13 @@ async function processJob(job) {
 
     await pool.query('COMMIT');
 
-    // Best-effort grant access immediately if channel configured
+    // Event-driven access granting
     if (env.CHANNEL_ID && user.rows[0].access_granted !== true) {
-      try {
-        const inviteLink = await createInviteLink({
-          botToken: env.BOT_TOKEN,
-          channelId: env.CHANNEL_ID,
-          memberLimit: 1,
-          expireSeconds: 3600,
-        });
-        await sendAccessMessage({ botToken: env.BOT_TOKEN, telegramId: String(telegramId), inviteLink });
-        await pool.query('UPDATE users SET access_granted=true WHERE telegram_id=$1', [String(telegramId)]);
-      } catch (e) {
-        log.warn({ jobId: job.id, telegramId, err: String(e?.message || e) }, 'grant_access_failed');
-      }
+      await accessGrantQueue.add(
+        'grant_access',
+        { telegramId: String(telegramId) },
+        { jobId: `grant:${String(telegramId)}`, attempts: 10, backoff: { type: 'exponential', delay: 10000 } },
+      );
     }
 
     return { ok: true, status: 'paid', txHash, telegramId, intentId };
@@ -151,4 +145,3 @@ worker.on('failed', (job, err) => {
 });
 
 log.info('verifyPaymentWorker started');
-

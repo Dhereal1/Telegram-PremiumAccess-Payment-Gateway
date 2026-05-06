@@ -15,8 +15,8 @@ const EnvSchema = z.object({
   TON_API_URL: z.string().optional(),
   TON_API_KEY: z.string().optional(),
 
-  // Queue
-  REDIS_URL: z.string().min(1),
+  // Queue (optional for routes that don't enqueue)
+  REDIS_URL: z.string().optional(),
 
   // Optional auth for manual cron triggers / internal endpoints
   CRON_SECRET: z.string().optional(),
@@ -31,3 +31,8 @@ export function getEnv() {
   return parsed.data;
 }
 
+export function requireRedisUrl() {
+  const env = getEnv();
+  if (!env.REDIS_URL) throw new Error('Missing REDIS_URL');
+  return env.REDIS_URL;
+}

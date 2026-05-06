@@ -1,11 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/cron/verify-payments",
-      "schedule": "*/1 * * * *"
-    },
-    {
-      "path": "/api/cron/grant-access",
+      "path": "/api/internal/retry-failed",
       "schedule": "*/1 * * * *"
     }
   ]
