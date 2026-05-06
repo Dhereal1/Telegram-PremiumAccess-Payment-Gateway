@@ -1,0 +1,30 @@
+{
+  "name": "telegram-premium-access-payment-gateway",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "start:api": "node server.js",
+    "test": "echo \"No tests yet\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Dhereal1/Telegram-Premium-Access-Payment-Gateway.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Dhereal1/Telegram-Premium-Access-Payment-Gateway/issues"
+  },
+  "homepage": "https://github.com/Dhereal1/Telegram-Premium-Access-Payment-Gateway#readme",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "pg": "^8.20.0",
+    "telegraf": "^4.16.3"
+  }
+}
