@@ -67,13 +67,13 @@ function loadStringTailSafe(slice) {
 
 export function extractTelegramIdFromComment(comment) {
   if (!comment) return null;
-  const m = String(comment).match(/(?:^|\\s)tp:(\\d+)(?:\\||\\s|$)/);
+  const m = String(comment).match(/(?:^|\\s|\\|)tp:(\\d+)(?:\\||\\s|$)/);
   return m ? m[1] : null;
 }
 
 export function extractPaymentIntentIdFromComment(comment) {
   if (!comment) return null;
-  const m = String(comment).match(/(?:^|\\s)pi:([0-9a-fA-F-]{36})(?:\\||\\s|$)/);
+  const m = String(comment).match(/(?:^|\\s|\\|)pi:([0-9a-fA-F-]{36})(?:\\||\\s|$)/);
   return m ? m[1] : null;
 }
 
