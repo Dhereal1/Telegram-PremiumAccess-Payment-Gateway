@@ -9,6 +9,7 @@ function App() {
   const [colorScheme, setColorScheme] = useState(null)
   const [authStatus, setAuthStatus] = useState('idle')
   const [authError, setAuthError] = useState(null)
+  const [clientError, setClientError] = useState(null)
   const walletAddress = useTonAddress()
   const wallet = useTonWallet()
   const [tonConnectUI] = useTonConnectUI()
@@ -21,6 +22,25 @@ function App() {
 
   const receiverAddress = import.meta.env.VITE_TON_RECEIVER_ADDRESS || 'UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJKZ'
   const tonPriceTon = Number(import.meta.env.VITE_TON_PRICE_TON || '0.1')
+
+  useEffect(() => {
+    function onError(event) {
+      const message = event?.error?.message || event?.message || 'Unknown error'
+      setClientError(message)
+    }
+
+    function onRejection(event) {
+      const message = event?.reason?.message || String(event?.reason || 'Unhandled rejection')
+      setClientError(message)
+    }
+
+    window.addEventListener('error', onError)
+    window.addEventListener('unhandledrejection', onRejection)
+    return () => {
+      window.removeEventListener('error', onError)
+      window.removeEventListener('unhandledrejection', onRejection)
+    }
+  }, [])
 
   useEffect(() => {
     if (!tg) return
@@ -226,6 +246,7 @@ function App() {
             initData present ✅ • auth: {authStatus}
           </span>
           {authError ? <div className="hint">{authError}</div> : null}
+          {clientError ? <div className="hint">Client error: {clientError}</div> : null}
         </footer>
       ) : null}
     </div>
