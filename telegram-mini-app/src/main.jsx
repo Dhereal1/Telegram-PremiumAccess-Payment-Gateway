@@ -2,6 +2,12 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
+import { Buffer } from 'buffer'
+import process from 'process'
+
+// Polyfills for TON libs in Telegram webviews
+if (!globalThis.Buffer) globalThis.Buffer = Buffer
+if (!globalThis.process) globalThis.process = process
 
 function renderFatal(message) {
   const root = document.getElementById('root')
