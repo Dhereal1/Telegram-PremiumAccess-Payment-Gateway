@@ -32,7 +32,9 @@ export function verifyTelegramData(initData, botToken, { maxAgeSeconds } = {}) {
     .map(([key, value]) => `${key}=${value}`)
     .join('\n');
 
-  const secretKey = crypto.createHash('sha256').update(botToken).digest();
+  // Telegram Mini App (WebApp) verification:
+  // secret_key = HMAC_SHA256(bot_token, key="WebAppData")
+  const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
   const hmac = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
 
   const ok = timingSafeEqualHex(hmac, hash);
