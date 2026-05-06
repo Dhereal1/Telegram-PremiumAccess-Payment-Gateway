@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Address, Cell, Slice, toNano } from '@ton/core';
+import { Address, Cell, toNano } from '@ton/core';
 
 export function normalizeTonAddress(address) {
   if (!address || typeof address !== 'string') return null;
@@ -67,13 +67,13 @@ function loadStringTailSafe(slice) {
 
 export function extractTelegramIdFromComment(comment) {
   if (!comment) return null;
-  const m = String(comment).match(/(?:^|\\s|\\|)tp:(\\d+)(?:\\||\\s|$)/);
+  const m = String(comment).match(/(?:^|\s|\|)tp:(\d+)(?:\||\s|$)/);
   return m ? m[1] : null;
 }
 
 export function extractPaymentIntentIdFromComment(comment) {
   if (!comment) return null;
-  const m = String(comment).match(/(?:^|\\s|\\|)pi:([0-9a-fA-F-]{36})(?:\\||\\s|$)/);
+  const m = String(comment).match(/(?:^|\s|\|)pi:([0-9a-fA-F-]{36})(?:\||\s|$)/);
   return m ? m[1] : null;
 }
 
@@ -98,7 +98,7 @@ export function isValidIncomingPayment(tx, { receiverAddress, minTon }) {
 }
 
 export async function getTransactions({ apiUrl, apiKey, address, limit = 20, lt, hash }) {
-  const url = `${apiUrl.replace(/\\/$/, '')}/getTransactions`;
+  const url = `${apiUrl.replace(/\/$/, '')}/getTransactions`;
   const res = await axios.get(url, {
     params: { address, limit, ...(lt ? { lt } : {}), ...(hash ? { hash } : {}) },
     headers: apiKey ? { 'X-API-Key': apiKey } : undefined,

@@ -88,7 +88,6 @@ async function main() {
   const intervalMs = Number(process.env.TON_LISTENER_INTERVAL_MS || '15000');
   log.info({ intervalMs }, 'tonListener started');
 
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
       const res = await pollOnce();

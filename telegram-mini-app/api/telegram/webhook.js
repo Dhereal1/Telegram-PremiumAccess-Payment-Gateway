@@ -1,10 +1,12 @@
 import { Telegraf } from 'telegraf';
 import { readJson } from '../_lib/http.js';
 import crypto from 'crypto';
+import { getLogger } from '../_lib/log.js';
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const WEB_APP_URL = process.env.WEB_APP_URL;
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
+const log = getLogger();
 
 if (!BOT_TOKEN) {
   throw new Error('Missing BOT_TOKEN env var');
@@ -32,7 +34,7 @@ bot.start(async (ctx) => {
 
 bot.catch((err, ctx) => {
   const updateId = ctx?.update?.update_id;
-  console.error('Bot error', { updateId, err });
+  log.error({ updateId, err: String(err?.message || err) }, 'bot_error');
 });
 
 export default async function handler(req, res) {
@@ -51,7 +53,7 @@ export default async function handler(req, res) {
     await bot.handleUpdate(update);
     return res.status(200).send('OK');
   } catch (e) {
-    console.error('Webhook handler failed:', e);
+    log.error({ err: String(e?.message || e) }, 'webhook_handler_failed');
     return res.status(500).json({ error: 'Webhook handler failed' });
   }
 }

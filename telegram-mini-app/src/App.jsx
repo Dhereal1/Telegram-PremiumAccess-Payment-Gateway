@@ -3,13 +3,13 @@ import './App.css'
 
 function App() {
   const [user, setUser] = useState(null)
-  const [isTelegram, setIsTelegram] = useState(false)
   const [colorScheme, setColorScheme] = useState(null)
   const [authStatus, setAuthStatus] = useState('idle')
   const [authError, setAuthError] = useState(null)
   const [clientError, setClientError] = useState(null)
 
   const tg = useMemo(() => window.Telegram?.WebApp, [])
+  const isTelegram = Boolean(tg)
 
   useEffect(() => {
     function onError(event) {
@@ -33,7 +33,6 @@ function App() {
   useEffect(() => {
     if (!tg) return
 
-    setIsTelegram(true)
     tg.ready()
     tg.expand()
 
