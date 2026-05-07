@@ -15,6 +15,10 @@ function TonSection({ user, tg }) {
   const receiverAddress = import.meta.env.VITE_TON_RECEIVER_ADDRESS || 'UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJKZ'
   const tonPriceTon = Number(import.meta.env.VITE_TON_PRICE_TON || '0.1')
 
+  // Prefer backend-provided values once an intent is created (prevents UI drift from build-time env).
+  const receiverAddressDisplay = activeIntent?.receiverAddress || receiverAddress
+  const tonPriceDisplay = Number(activeIntent?.expectedAmountTon ?? tonPriceTon)
+
   useEffect(() => {
     if (!walletAddress) return
     if (!user?.id) return
@@ -126,11 +130,11 @@ function TonSection({ user, tg }) {
         </div>
 
         <button className="payBtn" onClick={handlePayment} disabled={!walletAddress || payStatus === 'sending'}>
-          {payStatus === 'sending' ? 'Sending…' : `Pay ${tonPriceTon} TON`}
+          {payStatus === 'sending' ? 'Sending…' : `Pay ${tonPriceDisplay} TON`}
         </button>
 
         <p className="loading">
-          Receiver: <span className="mono">{receiverAddress}</span>
+          Receiver: <span className="mono">{receiverAddressDisplay}</span>
         </p>
         {payError ? <p className="loading">Error: {payError}</p> : null}
         {payStatus === 'sent' ? <p className="loading">Payment request sent. Waiting for confirmation…</p> : null}
@@ -145,3 +149,4 @@ function TonSection({ user, tg }) {
 }
 
 export default TonSection
+
