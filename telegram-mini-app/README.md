@@ -89,6 +89,27 @@ Tune batch size/time via env vars:
 - `RUN_WORKERS_MAX_ACCESS` (default `10`)
 - `RUN_WORKERS_MAX_EXPIRY` (default `2`)
 
+### Run from a Windows laptop (PowerShell)
+
+Set env vars in your shell session (recommended for local):
+
+```powershell
+$env:RUN_WORKERS_URL="https://<YOUR_VERCEL_DOMAIN>/api/internal/run-workers"
+$env:CRON_SECRET="<YOUR_CRON_SECRET>"
+```
+
+Run once:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File ..\\scripts\\local\\run-workers-once.ps1
+```
+
+Run in a loop (every 60s by default):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File ..\\scripts\\local\\run-workers-loop.ps1
+```
+
 Vercel env vars required:
 - `TON_RECEIVER_ADDRESS` (same as your merchant address)
 - `TON_PRICE_TON` (minimum TON to accept, e.g. `0.1` for testing)
