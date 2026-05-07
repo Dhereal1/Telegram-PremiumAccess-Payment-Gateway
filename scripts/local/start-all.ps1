@@ -43,11 +43,23 @@ if ($webExists) {
 }
 
 Write-Host "[start-all] Starting workers..."
-Start-Pm2Process "ton-listener" "workers/listeners/tonListener.mjs"
 Start-Pm2Process "verify-payments" "workers/processors/verifyPaymentWorker.mjs"
 Start-Pm2Process "grant-access" "workers/processors/grantAccessWorker.mjs"
 Start-Pm2Process "expiry" "workers/processors/expiryWorker.mjs"
-Start-Pm2Process "expiry-scheduler" "workers/listeners/expiryScheduler.mjs"
+
+$tonListenerPath = "workers/listeners/tonListener.mjs"
+if (Test-Path $tonListenerPath) {
+  Start-Pm2Process "ton-listener" $tonListenerPath
+} else {
+  Write-Host "[start-all] Skipping ton-listener (missing $tonListenerPath)"
+}
+
+$expirySchedulerPath = "workers/listeners/expiryScheduler.mjs"
+if (Test-Path $expirySchedulerPath) {
+  Start-Pm2Process "expiry-scheduler" $expirySchedulerPath
+} else {
+  Write-Host "[start-all] Skipping expiry-scheduler (missing $expirySchedulerPath)"
+}
 
 Write-Host "[start-all] Starting Cloudflare tunnel..."
 if (!(Get-Command cloudflared -ErrorAction SilentlyContinue)) {
