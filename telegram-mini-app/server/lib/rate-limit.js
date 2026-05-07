@@ -8,7 +8,14 @@ const log = getLogger()
 
 function getRedis() {
   if (redis) return redis
-  redis = new IORedis(requireRedisUrl(), { maxRetriesPerRequest: null, enableReadyCheck: false })
+  // Rate limiting must fail fast in serverless; do not hang requests if Redis is unavailable.
+  redis = new IORedis(requireRedisUrl(), {
+    maxRetriesPerRequest: 1,
+    enableReadyCheck: false,
+    connectTimeout: 2000,
+    commandTimeout: 2000,
+    retryStrategy: () => null,
+  })
   // Prevent unhandled 'error' events from crashing the process (common on serverless cold starts / idle closes).
   redis.on('error', (err) => {
     log.error({ err: String(err?.message || err) }, 'redis_error')
