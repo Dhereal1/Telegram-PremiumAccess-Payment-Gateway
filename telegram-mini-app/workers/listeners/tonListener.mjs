@@ -9,6 +9,16 @@ const env = getWorkerEnv();
 const log = getWorkerLogger();
 const pool = getDb();
 
+log.info(
+  {
+    tonApiUrl: env.TON_API_URL,
+    hasTonApiKey: Boolean(env.TON_API_KEY && env.TON_API_KEY.length > 0),
+    receiverHasColon: Boolean(env.TON_RECEIVER_ADDRESS && env.TON_RECEIVER_ADDRESS.includes(':')),
+    receiverLen: env.TON_RECEIVER_ADDRESS ? env.TON_RECEIVER_ADDRESS.length : 0,
+  },
+  'tonListener env',
+);
+
 async function getCursor() {
   const id = `ton:${env.TON_RECEIVER_ADDRESS}`
   const row = await pool.query('SELECT last_lt, last_hash FROM blockchain_cursors WHERE id=$1', [id])
