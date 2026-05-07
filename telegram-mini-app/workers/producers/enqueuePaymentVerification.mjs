@@ -7,7 +7,6 @@ export async function enqueuePaymentVerification({ tx }) {
   await paymentQueue.add(
     'verify-payment',
     { tx },
-    { jobId: `tx:${String(txHash)}` }
+    { jobId: `tx_${String(txHash)}` }
   )
 }
-

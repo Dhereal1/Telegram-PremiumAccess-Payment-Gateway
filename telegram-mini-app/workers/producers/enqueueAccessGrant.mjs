@@ -4,7 +4,6 @@ export async function enqueueAccessGrant({ userId, telegramId }) {
   await accessQueue.add(
     'grant-access',
     { userId, telegramId },
-    { jobId: `access:${userId}` }
+    { jobId: `access_${userId}` }
   )
 }
-

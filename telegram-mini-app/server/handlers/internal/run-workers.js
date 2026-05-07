@@ -91,7 +91,7 @@ async function tonPollAndEnqueue({ paymentVerificationQueue, receiverAddress, ap
     if (!txHash) continue
 
     try {
-      await paymentVerificationQueue.add('verify-payment', { tx }, { jobId: `tx:${String(txHash)}` })
+      await paymentVerificationQueue.add('verify-payment', { tx }, { jobId: `tx_${String(txHash)}` })
     } catch {
       // ignore duplicate jobId
     }
@@ -107,7 +107,7 @@ async function tonPollAndEnqueue({ paymentVerificationQueue, receiverAddress, ap
 }
 
 async function enqueueExpiryTick({ expiryQueue }) {
-  const jobId = `expiry:${Math.floor(Date.now() / 60000)}`
+  const jobId = `expiry_${Math.floor(Date.now() / 60000)}`
   try {
     await expiryQueue.add('expire', { limit: 200 }, { jobId })
     return { enqueued: true, jobId }
@@ -231,7 +231,7 @@ export default async function handler(req, res) {
           await accessGrantQueue.add(
             'grant-access',
             { userId: out.enqueueAccessUserId, telegramId: out.enqueueAccessTelegramId },
-            { jobId: `access:${out.enqueueAccessUserId}` },
+            { jobId: `access_${out.enqueueAccessUserId}` },
           )
         }
         return out

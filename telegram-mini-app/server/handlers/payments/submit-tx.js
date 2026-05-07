@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     await paymentVerificationQueue.add(
       'verify-payment',
       { tx },
-      { jobId: `tx:${String(txHash)}`, attempts: 8, backoff: { type: 'exponential', delay: 5000 } },
+      { jobId: `tx_${String(txHash)}`, attempts: 8, backoff: { type: 'exponential', delay: 5000 } },
     )
 
     log.info({ requestId, txHash }, 'payment_verification_enqueued')
@@ -54,4 +54,3 @@ export default async function handler(req, res) {
     return res.status(statusCode).json({ error: 'Internal error' })
   }
 }
-

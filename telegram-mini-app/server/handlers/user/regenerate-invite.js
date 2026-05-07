@@ -33,9 +33,8 @@ export default async function handler(req, res) {
   await accessGrantQueue.add(
     'regenerate-invite',
     { userId, telegramId: String(tgUser.id), forceRegenerate: true },
-    { jobId: `regen:${userId}:${Date.now()}` },
+    { jobId: `regen_${userId}_${Date.now()}` },
   )
 
   return res.json({ ok: true, enqueued: true })
 }
-
