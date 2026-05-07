@@ -1,0 +1,21 @@
+// CJS wrapper for PM2 on Windows: load `.env` first, then spawn the ESM entry.
+// Usage: node workers/_lib/pm2-loader.cjs <entry.mjs>
+
+const path = require('path');
+const { spawn } = require('child_process');
+
+// Always load the repo-local env file for workers.
+require('dotenv').config({ path: path.join(__dirname, '../../.env') });
+
+const script = process.argv[2];
+if (!script) {
+  console.error('Usage: node workers/_lib/pm2-loader.cjs <entry.mjs>');
+  process.exit(2);
+}
+
+const child = spawn(process.execPath, [script], {
+  env: process.env,
+  stdio: 'inherit',
+});
+
+child.on('exit', (code) => process.exit(code ?? 0));
