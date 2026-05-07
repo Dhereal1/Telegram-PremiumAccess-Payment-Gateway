@@ -104,7 +104,14 @@ async function main() {
       const res = await pollOnce();
       if (res.enqueued) log.info(res, 'tonListener enqueued jobs');
     } catch (e) {
-      log.error({ err: String(e?.message || e) }, 'tonListener poll failed');
+      log.error(
+        {
+          err: String(e?.message || e),
+          status: e?.response?.status,
+          data: e?.response?.data && typeof e.response.data === 'object' ? e.response.data : undefined,
+        },
+        'tonListener poll failed',
+      );
     }
 
     await new Promise((r) => setTimeout(r, intervalMs));
