@@ -20,7 +20,7 @@ Write-Host "[start-all] Installing deps (if needed)..."
 npm install | Out-Null
 
 function Start-Pm2Process($Name, $ScriptPath) {
-  $existing = (npx pm2 jlist | ConvertFrom-Json | Where-Object { $_.name -eq $Name })
+  $existing = (npx pm2 jlist --silent | ConvertFrom-Json | Where-Object { $_.name -eq $Name })
   if ($existing) {
     Write-Host "[start-all] pm2 restart $Name"
     npx pm2 restart $Name --update-env | Out-Null
@@ -31,7 +31,7 @@ function Start-Pm2Process($Name, $ScriptPath) {
 }
 
 Write-Host "[start-all] Starting local web server (Vite+API) on port $Port ..."
-$web = (npx pm2 jlist | ConvertFrom-Json | Where-Object { $_.name -eq "local-web" })
+$web = (npx pm2 jlist --silent | ConvertFrom-Json | Where-Object { $_.name -eq "local-web" })
 if ($web) {
   npx pm2 restart local-web --update-env | Out-Null
 } else {
@@ -89,4 +89,3 @@ Write-Host "  npx pm2 list"
 Write-Host "  npx pm2 logs local-web --lines 50"
 Write-Host "  npx pm2 logs local-bot --lines 50"
 Write-Host "  npx pm2 logs ton-listener --lines 50"
-
