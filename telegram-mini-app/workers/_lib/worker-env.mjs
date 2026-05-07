@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import dotenv from 'dotenv';
+
+// Load local env when running workers on a laptop/VM.
+// This is a no-op in environments where vars are already provided (dotenv does not override by default).
+dotenv.config({ path: new URL('../../.env', import.meta.url) });
 
 const WorkerEnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
@@ -25,4 +30,3 @@ export function getWorkerEnv() {
   }
   return parsed.data;
 }
-
