@@ -20,8 +20,11 @@ Write-Host "[start-all] Installing deps (if needed)..."
 npm install | Out-Null
 
 function Start-Pm2Process($Name, $ScriptPath) {
-  $existing = (npx pm2 jlist --silent | ConvertFrom-Json | Where-Object { $_.name -eq $Name })
-  if ($existing) {
+  # Avoid parsing `pm2 jlist` JSON in Windows PowerShell (it can fail due to duplicate keys / extra output).
+  npx pm2 show $Name *> $null
+  $exists = ($LASTEXITCODE -eq 0)
+
+  if ($exists) {
     Write-Host "[start-all] pm2 restart $Name"
     npx pm2 restart $Name --update-env | Out-Null
   } else {
@@ -31,8 +34,9 @@ function Start-Pm2Process($Name, $ScriptPath) {
 }
 
 Write-Host "[start-all] Starting local web server (Vite+API) on port $Port ..."
-$web = (npx pm2 jlist --silent | ConvertFrom-Json | Where-Object { $_.name -eq "local-web" })
-if ($web) {
+npx pm2 show local-web *> $null
+$webExists = ($LASTEXITCODE -eq 0)
+if ($webExists) {
   npx pm2 restart local-web --update-env | Out-Null
 } else {
   npx pm2 start node --name local-web -- "server/local-dev.mjs" | Out-Null
