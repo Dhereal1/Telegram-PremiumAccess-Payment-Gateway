@@ -3,54 +3,59 @@ import { readJson } from '../../lib/http.js'
 import crypto from 'crypto'
 import { getLogger } from '../../lib/log.js'
 
-const BOT_TOKEN = process.env.BOT_TOKEN
-const WEB_APP_URL = process.env.WEB_APP_URL
-const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET
 const log = getLogger()
+let bot
+let botWebAppUrl
 
-if (!BOT_TOKEN) {
-  throw new Error('Missing BOT_TOKEN env var')
-}
-if (!WEB_APP_URL) {
-  throw new Error('Missing WEB_APP_URL env var (must be HTTPS and publicly reachable)')
-}
+function getBot() {
+  if (bot) return bot
 
-const bot = new Telegraf(BOT_TOKEN)
+  const botToken = process.env.BOT_TOKEN
+  const webAppUrl = process.env.WEB_APP_URL
+  if (!botToken) throw new Error('Missing BOT_TOKEN env var')
+  if (!webAppUrl) throw new Error('Missing WEB_APP_URL env var (must be HTTPS and publicly reachable)')
 
-bot.start(async (ctx) => {
-  await ctx.reply('Welcome! Launch the app below:', {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: '🚀 Open App',
-            web_app: { url: WEB_APP_URL },
-          },
+  botWebAppUrl = webAppUrl
+  bot = new Telegraf(botToken)
+
+  bot.start(async (ctx) => {
+    await ctx.reply('Welcome! Launch the app below:', {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: '🚀 Open App',
+              web_app: { url: botWebAppUrl },
+            },
+          ],
         ],
-      ],
-    },
+      },
+    })
   })
-})
 
-bot.catch((err, ctx) => {
-  const updateId = ctx?.update?.update_id
-  log.error({ updateId, err: String(err?.message || err) }, 'bot_error')
-})
+  bot.catch((err, ctx) => {
+    const updateId = ctx?.update?.update_id
+    log.error({ updateId, err: String(err?.message || err) }, 'bot_error')
+  })
+
+  return bot
+}
 
 export default async function handler(req, res) {
   if (req.method === 'GET') return res.status(200).send('OK')
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   try {
-    if (WEBHOOK_SECRET) {
+    const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET
+    if (webhookSecret) {
       const header = req.headers['x-telegram-bot-api-secret-token']
       const provided = Array.isArray(header) ? header[0] : header
-      const ok = timingSafeEqualUtf8(String(provided || ''), WEBHOOK_SECRET)
+      const ok = timingSafeEqualUtf8(String(provided || ''), webhookSecret)
       if (!ok) return res.status(401).json({ error: 'Unauthorized' })
     }
 
     const update = req.body && typeof req.body === 'object' ? req.body : await readJson(req)
-    await bot.handleUpdate(update)
+    await getBot().handleUpdate(update)
     return res.status(200).send('OK')
   } catch (e) {
     log.error({ err: String(e?.message || e) }, 'webhook_handler_failed')
@@ -64,4 +69,3 @@ function timingSafeEqualUtf8(a, b) {
   if (aBuf.length !== bBuf.length) return false
   return crypto.timingSafeEqual(aBuf, bBuf)
 }
-
