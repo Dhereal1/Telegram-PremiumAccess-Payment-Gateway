@@ -179,6 +179,10 @@ export default async function handler(req, res) {
   if (!receiverAddress) return res.status(500).json({ error: 'Missing TON_RECEIVER_ADDRESS' })
 
   const connection = new IORedis(redisUrl, { maxRetriesPerRequest: null, enableReadyCheck: false })
+  // Prevent unhandled 'error' events from crashing the function runtime.
+  connection.on('error', (err) => {
+    log.error({ err: String(err?.message || err) }, 'redis_error')
+  })
   const runId = crypto.randomUUID()
   const lockKey = 'run-workers:lock'
   const lockTtlMs = Number(process.env.RUN_WORKERS_LOCK_TTL_MS || '55000')
@@ -286,4 +290,3 @@ export default async function handler(req, res) {
     }
   }
 }
-

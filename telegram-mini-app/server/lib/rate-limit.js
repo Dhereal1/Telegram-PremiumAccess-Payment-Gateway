@@ -1,12 +1,18 @@
 import crypto from 'crypto'
 import IORedis from 'ioredis'
 import { requireRedisUrl } from './env.js'
+import { getLogger } from './log.js'
 
 let redis
+const log = getLogger()
 
 function getRedis() {
   if (redis) return redis
   redis = new IORedis(requireRedisUrl(), { maxRetriesPerRequest: null, enableReadyCheck: false })
+  // Prevent unhandled 'error' events from crashing the process (common on serverless cold starts / idle closes).
+  redis.on('error', (err) => {
+    log.error({ err: String(err?.message || err) }, 'redis_error')
+  })
   return redis
 }
 
