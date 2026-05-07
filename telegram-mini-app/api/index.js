@@ -13,8 +13,12 @@ import userWallet from '../server/handlers/user/wallet.js'
 import userStatusTelegramId from '../server/handlers/user/status/[telegram_id].js'
 
 function getPath(req) {
-  // req.url is usually like `/api/...?...`
+  // When using Vercel rewrites, we preserve the original API path in `__path`.
+  // Example: /api/user/status/123 -> /api/index?__path=/user/status/123
   const u = new URL(req.url, 'http://localhost')
+  const override = u.searchParams.get('__path')
+  if (override) return override.startsWith('/') ? override : `/${override}`
+
   const pathname = u.pathname || '/'
   if (!pathname.startsWith('/api')) return pathname
   const stripped = pathname.slice('/api'.length) || '/'
@@ -91,4 +95,3 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Internal error', message: String(e?.message || e) })
   }
 }
-

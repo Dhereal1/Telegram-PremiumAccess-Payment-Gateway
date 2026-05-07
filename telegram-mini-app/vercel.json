@@ -1,4 +1,10 @@
 {
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/index?__path=/:path*"
+    }
+  ],
   "crons": [
     {
       "path": "/api/internal/run-workers",
