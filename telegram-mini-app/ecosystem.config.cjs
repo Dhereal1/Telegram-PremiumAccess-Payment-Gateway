@@ -1,6 +1,13 @@
 module.exports = {
   apps: [
     {
+      name: 'cloudflared',
+      script: 'bin/cloudflared.exe',
+      args: 'tunnel --no-autoupdate --url http://localhost:3000',
+      exec_interpreter: 'none',
+      cwd: __dirname,
+    },
+    {
       name: 'local-web',
       script: 'server/local-dev.mjs',
       interpreter: 'node',
