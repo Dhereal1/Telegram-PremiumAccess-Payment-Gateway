@@ -1,9 +1,13 @@
 module.exports = {
   apps: [
     {
-      name: 'cloudflared',
-      script: 'bin/cloudflared.exe',
-      args: 'tunnel --no-autoupdate --url http://localhost:3000',
+      // Public HTTPS tunnel for local dev. Prefer ngrok for stability on spotty DNS.
+      // Install via: scripts/install-ngrok.ps1
+      name: 'ngrok',
+      script: 'bin/ngrok.exe',
+      // ngrok requires an authtoken (free). Set NGROK_AUTHTOKEN in .env and run:
+      //   bin/ngrok.exe config add-authtoken %NGROK_AUTHTOKEN%
+      args: 'http http://localhost:3000 --log=stdout',
       exec_interpreter: 'none',
       cwd: __dirname,
     },
