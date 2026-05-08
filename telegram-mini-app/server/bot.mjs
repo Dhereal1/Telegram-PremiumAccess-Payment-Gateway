@@ -15,8 +15,12 @@ function normalizeWebAppUrl(webAppUrl) {
   return u.replace(/\/+$/, '')
 }
 
-function makeGroupLink(webAppUrl, groupId) {
+function makeMiniAppGroupUrl(webAppUrl, groupId) {
   return `${normalizeWebAppUrl(webAppUrl)}/?g=${encodeURIComponent(String(groupId))}`
+}
+
+function makeBotDeepLink({ botUsername, groupId }) {
+  return `https://t.me/${botUsername}?start=${encodeURIComponent(`g_${String(groupId)}`)}`
 }
 
 function parsePositiveNumber(text) {
@@ -64,6 +68,12 @@ function parseStartPayload(payload) {
   return p.slice('onboard_'.length)
 }
 
+function parseGroupPayload(payload) {
+  const p = String(payload || '')
+  const m = p.match(/^g_([0-9a-fA-F-]{36})$/)
+  return m ? m[1] : null
+}
+
 async function safeDmOrGroupNotice({ ctx, botUsername, adminId, chatId }) {
   try {
     await ctx.telegram.sendMessage(adminId, '👋 You added me to a group.\n\nLet’s set up your premium subscription.\n\nClick below to begin.', {
@@ -91,8 +101,50 @@ export function createBot({ botToken, webAppUrl }) {
   // Ensure botInfo is populated even when using webhooks (no .launch()).
   bot.telegram.getMe().then((me) => { bot.botInfo = me }).catch(() => {})
 
+  async function getBotUsername() {
+    if (process.env.BOT_USERNAME) return String(process.env.BOT_USERNAME).replace(/^@/, '')
+    const fromInfo = bot.botInfo?.username
+    if (fromInfo) return String(fromInfo)
+    try {
+      const me = await bot.telegram.getMe()
+      bot.botInfo = me
+      return String(me.username)
+    } catch {
+      return null
+    }
+  }
+
   bot.start(async (ctx) => {
     const payload = ctx.startPayload
+
+    // User deep-link flow: start=g_<groupId>
+    const groupIdFromPayload = parseGroupPayload(payload)
+    if (groupIdFromPayload) {
+      const pool = getPool()
+      const r = await pool.query(
+        `SELECT id, name, price_ton, duration_days
+         FROM groups
+         WHERE id=$1 AND is_active=TRUE`,
+        [String(groupIdFromPayload)],
+      )
+      const group = r.rows[0] || null
+      if (!group) {
+        await ctx.reply('This group is no longer available.')
+        return
+      }
+
+      const miniAppUrl = makeMiniAppGroupUrl(normalizedWebAppUrl, group.id)
+      await ctx.reply(
+        `Welcome to ${group.name}!\n\nSubscription: ${Number(group.price_ton)} TON / ${Number(group.duration_days)} days\n\nTap the button below to subscribe and get instant access.`,
+        {
+          reply_markup: {
+            inline_keyboard: [[{ text: 'Subscribe Now 🚀', web_app: { url: miniAppUrl } }]],
+          },
+        },
+      )
+      return
+    }
+
     const chatIdFromPayload = parseStartPayload(payload)
     if (chatIdFromPayload) {
       const adminId = String(ctx.from?.id || '')
@@ -272,7 +324,10 @@ export function createBot({ botToken, webAppUrl }) {
       })
 
       await deleteOnboardingSession({ adminId, telegramChatId })
-      const link = makeGroupLink(normalizedWebAppUrl, group.id)
+      const botUsername = await getBotUsername()
+      const link = botUsername
+        ? makeBotDeepLink({ botUsername, groupId: group.id })
+        : makeMiniAppGroupUrl(normalizedWebAppUrl, group.id)
       await ctx.reply(`✅ Your premium group is ready!\n\n🔗 Your subscription link:\n${link}\n\nShare this with your audience to start earning.`)
       return
     }
@@ -299,7 +354,10 @@ export function createBot({ botToken, webAppUrl }) {
       })
 
       await deleteOnboardingSession({ adminId, telegramChatId })
-      const link = makeGroupLink(normalizedWebAppUrl, group.id)
+      const botUsername = await getBotUsername()
+      const link = botUsername
+        ? makeBotDeepLink({ botUsername, groupId: group.id })
+        : makeMiniAppGroupUrl(normalizedWebAppUrl, group.id)
       await ctx.reply(`✅ Your premium group is ready!\n\n🔗 Your subscription link:\n${link}\n\nShare this with your audience to start earning.`)
       return
     }

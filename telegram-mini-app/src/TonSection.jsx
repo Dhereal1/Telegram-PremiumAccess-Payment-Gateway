@@ -130,6 +130,11 @@ function TonSection({ user, tg }) {
   }, [tg, user?.id, walletAddress])
 
   const handlePayment = async () => {
+    if (!tg?.initData) {
+      setPayStatus('error')
+      setPayError('Open this Mini App from Telegram (via the bot).')
+      return
+    }
     if (!walletAddress) {
       setPayStatus('error')
       setPayError('Connect wallet first')
@@ -147,7 +152,10 @@ function TonSection({ user, tg }) {
         body: JSON.stringify({ initData: tg?.initData, ...(groupId ? { groupId } : {}) }),
       })
       const intentData = await intentResp.json().catch(() => null)
-      if (!intentResp.ok) throw new Error(intentData?.error || `Failed to create payment intent (${intentResp.status})`)
+      if (!intentResp.ok) {
+        const msg = intentData?.reason ? `${intentData?.error || 'Payment intent failed'}: ${intentData.reason}` : (intentData?.error || `Failed to create payment intent (${intentResp.status})`)
+        throw new Error(msg)
+      }
 
       setActiveIntent(intentData)
 

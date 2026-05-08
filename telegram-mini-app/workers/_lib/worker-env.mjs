@@ -11,6 +11,7 @@ const WorkerEnvSchema = z.object({
   REDIS_URL: z.string().min(1),
 
   BOT_TOKEN: z.string().min(1),
+  BOT_USERNAME: z.string().optional(),
   CHANNEL_ID: z.string().optional(),
 
   // Multi-tenant: receiver/price can be resolved from DB per group/admin.

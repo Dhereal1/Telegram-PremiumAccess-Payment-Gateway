@@ -8,8 +8,10 @@ import { verifyTelegramData, parseTelegramUser } from '../../lib/telegram.js'
 import { ipKey, rateLimit } from '../../lib/rate-limit.js'
 import { getGroupById } from '../../lib/groups.js'
 import { ensureMembership } from '../../lib/memberships.js'
+import { z } from 'zod'
 
 const log = getLogger()
+const GroupIdSchema = z.string().uuid()
 
 export default async function handler(req, res) {
   setCors(res)
@@ -53,6 +55,9 @@ export default async function handler(req, res) {
     const expiresAt = new Date(now.getTime() + 60 * 60 * 1000) // 60 minutes
 
     const groupId = body?.groupId || body?.group_id || null
+    if (groupId && !GroupIdSchema.safeParse(String(groupId)).success) {
+      return res.status(400).json({ error: 'Invalid groupId' })
+    }
 
     // Legacy single-tenant defaults
     let expectedTon = Number(process.env.TON_PRICE_TON || '0.1')
