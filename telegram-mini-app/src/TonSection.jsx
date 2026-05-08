@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { TonConnectButton, useTonAddress, useTonConnectUI, useTonWallet } from '@tonconnect/ui-react'
 import { beginCell, toNano } from '@ton/core'
 
@@ -11,6 +11,8 @@ function TonSection({ user, tg }) {
   const [payStatus, setPayStatus] = useState('idle')
   const [payError, setPayError] = useState(null)
   const [activeIntent, setActiveIntent] = useState(null)
+  const [remoteStatus, setRemoteStatus] = useState(null)
+  const [remoteStatusError, setRemoteStatusError] = useState(null)
 
   const receiverAddress = import.meta.env.VITE_TON_RECEIVER_ADDRESS || 'UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJKZ'
   const tonPriceTon = Number(import.meta.env.VITE_TON_PRICE_TON || '0.1')
@@ -18,6 +20,70 @@ function TonSection({ user, tg }) {
   // Prefer backend-provided values once an intent is created (prevents UI drift from build-time env).
   const receiverAddressDisplay = activeIntent?.receiverAddress || receiverAddress
   const tonPriceDisplay = Number(activeIntent?.expectedAmountTon ?? tonPriceTon)
+
+  const fetchUserStatus = useCallback(async () => {
+    if (!user?.id) return null
+    const resp = await fetch(`/api/user/status/${encodeURIComponent(String(user.id))}`, { method: 'GET' })
+    const data = await resp.json().catch(() => null)
+    if (!resp.ok) throw new Error(data?.error || `Status failed (${resp.status})`)
+    setRemoteStatus(data)
+    return data
+  }, [user])
+
+  useEffect(() => {
+    if (!user?.id) return
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        setRemoteStatusError(null)
+        await fetchUserStatus()
+      } catch (e) {
+        if (!cancelled) setRemoteStatusError(String(e?.message || e))
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [fetchUserStatus, user])
+
+  // Poll backend after sending transaction until payment/access is reflected (or timeout).
+  useEffect(() => {
+    if (payStatus !== 'sent') return
+    if (!user?.id) return
+
+    let cancelled = false
+    let attempts = 0
+    const maxAttempts = 30 // ~2 minutes @ 4s
+
+    const interval = setInterval(async () => {
+      attempts += 1
+      try {
+        setRemoteStatusError(null)
+        const data = await fetchUserStatus()
+        const paid = Boolean(data?.paid)
+        const accessGranted = Boolean(data?.user?.access_granted)
+        if (paid || accessGranted) {
+          clearInterval(interval)
+          if (!cancelled) setPayStatus('confirmed')
+          return
+        }
+      } catch (e) {
+        if (!cancelled) setRemoteStatusError(String(e?.message || e))
+      }
+
+      if (attempts >= maxAttempts) {
+        clearInterval(interval)
+        if (!cancelled) setPayStatus('timeout')
+      }
+    }, 4000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [fetchUserStatus, payStatus, user])
 
   useEffect(() => {
     if (!walletAddress) return
@@ -129,7 +195,11 @@ function TonSection({ user, tg }) {
           <span className="value">{payStatus === 'idle' ? 'Ready' : payStatus}</span>
         </div>
 
-        <button className="payBtn" onClick={handlePayment} disabled={!walletAddress || payStatus === 'sending'}>
+        <button
+          className="payBtn"
+          onClick={handlePayment}
+          disabled={!walletAddress || payStatus === 'sending' || payStatus === 'sent'}
+        >
           {payStatus === 'sending' ? 'Sending…' : `Pay ${tonPriceDisplay} TON`}
         </button>
 
@@ -138,9 +208,31 @@ function TonSection({ user, tg }) {
         </p>
         {payError ? <p className="loading">Error: {payError}</p> : null}
         {payStatus === 'sent' ? <p className="loading">Payment request sent. Waiting for confirmation…</p> : null}
+        {payStatus === 'confirmed' ? <p className="loading">Payment confirmed ✅</p> : null}
+        {payStatus === 'timeout' ? (
+          <p className="loading">Still waiting. If you paid, keep this page open and it should confirm shortly.</p>
+        ) : null}
         {activeIntent?.intentId ? (
           <p className="loading">
             Intent: <span className="mono">{activeIntent.intentId}</span>
+          </p>
+        ) : null}
+
+        {remoteStatusError ? <p className="loading">Status error: {remoteStatusError}</p> : null}
+        {remoteStatus?.exists ? (
+          <p className="loading">
+            Access: <span className="mono">{remoteStatus.user?.access_granted ? 'granted' : 'not granted'}</span>
+            {' · '}
+            Paid: <span className="mono">{remoteStatus.paid ? 'true' : 'false'}</span>
+          </p>
+        ) : null}
+
+        {remoteStatus?.user?.last_invite_link ? (
+          <p className="loading">
+            Invite:{' '}
+            <a href={remoteStatus.user.last_invite_link} target="_blank" rel="noreferrer">
+              open link
+            </a>
           </p>
         ) : null}
       </section>
@@ -149,4 +241,3 @@ function TonSection({ user, tg }) {
 }
 
 export default TonSection
-
