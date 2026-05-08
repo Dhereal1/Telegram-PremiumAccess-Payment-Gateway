@@ -35,3 +35,31 @@ export async function setInviteInfo({ userId, inviteLink }) {
     [userId, inviteLink],
   )
 }
+
+// Multi-tenant membership variants
+export async function markMembershipAccessGrantedIfNotExists(membershipId) {
+  const pool = getPool()
+  const res = await pool.query(
+    `UPDATE memberships
+     SET access_granted = true, updated_at=NOW()
+     WHERE id = $1 AND access_granted = false
+     RETURNING *`,
+    [String(membershipId)],
+  )
+  return res.rows[0] || null
+}
+
+export async function unmarkMembershipAccessGranted(membershipId) {
+  const pool = getPool()
+  await pool.query('UPDATE memberships SET access_granted=false, updated_at=NOW() WHERE id=$1', [String(membershipId)])
+}
+
+export async function setMembershipInviteInfo({ membershipId, inviteLink }) {
+  const pool = getPool()
+  await pool.query(
+    `UPDATE memberships
+     SET last_invite_link=$2, invite_created_at=NOW(), updated_at=NOW()
+     WHERE id=$1`,
+    [String(membershipId), String(inviteLink)],
+  )
+}

@@ -13,8 +13,10 @@ const WorkerEnvSchema = z.object({
   BOT_TOKEN: z.string().min(1),
   CHANNEL_ID: z.string().optional(),
 
-  TON_RECEIVER_ADDRESS: z.string().min(1),
-  TON_PRICE_TON: z.string().default('0.1'),
+  // Multi-tenant: receiver/price can be resolved from DB per group/admin.
+  // Keep optional for SaaS mode; legacy single-tenant can still provide them.
+  TON_RECEIVER_ADDRESS: z.string().min(1).optional(),
+  TON_PRICE_TON: z.string().default('0.1').optional(),
   TON_API_URL: z.string().default('https://toncenter.com/api/v2'),
   TON_API_KEY: z.string().optional(),
 

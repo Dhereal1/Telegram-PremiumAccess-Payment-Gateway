@@ -13,14 +13,27 @@ log.info(
   {
     tonApiUrl: env.TON_API_URL,
     hasTonApiKey: Boolean(env.TON_API_KEY && env.TON_API_KEY.length > 0),
-    receiverHasColon: Boolean(env.TON_RECEIVER_ADDRESS && env.TON_RECEIVER_ADDRESS.includes(':')),
-    receiverLen: env.TON_RECEIVER_ADDRESS ? env.TON_RECEIVER_ADDRESS.length : 0,
+    hasLegacyReceiver: Boolean(env.TON_RECEIVER_ADDRESS),
   },
   'tonListener env',
 );
 
-async function getCursor() {
-  const id = `ton:${env.TON_RECEIVER_ADDRESS}`
+async function getWalletsToPoll() {
+  // Multi-tenant: poll wallets configured for admins that have active groups.
+  const wallets = await pool.query(
+    `SELECT DISTINCT a.wallet_address
+     FROM admins a
+     JOIN groups g ON g.admin_telegram_id = a.telegram_id
+     WHERE g.is_active = TRUE`,
+  )
+  const list = wallets.rows.map((r) => r.wallet_address).filter(Boolean)
+  if (list.length) return list
+  // Legacy single-tenant fallback
+  return env.TON_RECEIVER_ADDRESS ? [env.TON_RECEIVER_ADDRESS] : []
+}
+
+async function getCursorForWallet(walletAddress) {
+  const id = `ton_${walletAddress}`
   const row = await pool.query('SELECT last_lt, last_hash FROM blockchain_cursors WHERE id=$1', [id])
   const cur = row.rows[0] || {}
   return { id, lastLt: cur.last_lt ? String(cur.last_lt) : null, lastHash: cur.last_hash || null }
@@ -36,8 +49,8 @@ async function saveCursor(id, cur) {
   )
 }
 
-async function pollOnce() {
-  const { id, lastLt, lastHash } = await getCursor();
+async function pollOnceForWallet(walletAddress) {
+  const { id, lastLt, lastHash } = await getCursorForWallet(walletAddress);
   const pageLimit = Number(process.env.TON_TX_PAGE_LIMIT || '50');
   const maxPages = Number(process.env.TON_TX_MAX_PAGES || '8');
 
@@ -49,7 +62,7 @@ async function pollOnce() {
     const pageTxs = await getTransactions({
       apiUrl: env.TON_API_URL,
       apiKey: env.TON_API_KEY,
-      address: env.TON_RECEIVER_ADDRESS,
+      address: walletAddress,
       limit: pageLimit,
       ...(pageLt && pageHash ? { lt: pageLt, hash: pageHash } : {}),
     });
@@ -101,8 +114,11 @@ async function main() {
 
   while (true) {
     try {
-      const res = await pollOnce();
-      if (res.enqueued) log.info(res, 'tonListener enqueued jobs');
+      const wallets = await getWalletsToPoll()
+      for (const wallet of wallets) {
+        const res = await pollOnceForWallet(wallet);
+        if (res.enqueued) log.info({ wallet, ...res }, 'tonListener enqueued jobs');
+      }
     } catch (e) {
       log.error(
         {
@@ -118,7 +134,7 @@ async function main() {
   }
 }
 
-export { pollOnce };
+export { pollOnceForWallet as pollOnce };
 
 // Only start the long-running listener when executed directly (not when imported by serverless routes).
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

@@ -16,6 +16,11 @@ function TonSection({ user, tg }) {
 
   const receiverAddress = import.meta.env.VITE_TON_RECEIVER_ADDRESS || 'UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJKZ'
   const tonPriceTon = Number(import.meta.env.VITE_TON_PRICE_TON || '0.1')
+  const groupId =
+    new URLSearchParams(window.location.search).get('g') ||
+    new URLSearchParams(window.location.search).get('groupId') ||
+    tg?.initDataUnsafe?.start_param ||
+    null
 
   // Prefer backend-provided values once an intent is created (prevents UI drift from build-time env).
   const receiverAddressDisplay = activeIntent?.receiverAddress || receiverAddress
@@ -23,12 +28,13 @@ function TonSection({ user, tg }) {
 
   const fetchUserStatus = useCallback(async () => {
     if (!user?.id) return null
-    const resp = await fetch(`/api/user/status/${encodeURIComponent(String(user.id))}`, { method: 'GET' })
+    const qs = groupId ? `?groupId=${encodeURIComponent(String(groupId))}` : ''
+    const resp = await fetch(`/api/user/status/${encodeURIComponent(String(user.id))}${qs}`, { method: 'GET' })
     const data = await resp.json().catch(() => null)
     if (!resp.ok) throw new Error(data?.error || `Status failed (${resp.status})`)
     setRemoteStatus(data)
     return data
-  }, [user])
+  }, [groupId, user])
 
   useEffect(() => {
     if (!user?.id) return
@@ -135,7 +141,7 @@ function TonSection({ user, tg }) {
       const intentResp = await fetch('/api/payment-intents/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg?.initData }),
+        body: JSON.stringify({ initData: tg?.initData, ...(groupId ? { groupId } : {}) }),
       })
       const intentData = await intentResp.json().catch(() => null)
       if (!intentResp.ok) throw new Error(intentData?.error || `Failed to create payment intent (${intentResp.status})`)
@@ -221,16 +227,19 @@ function TonSection({ user, tg }) {
         {remoteStatusError ? <p className="loading">Status error: {remoteStatusError}</p> : null}
         {remoteStatus?.exists ? (
           <p className="loading">
-            Access: <span className="mono">{remoteStatus.user?.access_granted ? 'granted' : 'not granted'}</span>
+            Access:{' '}
+            <span className="mono">
+              {(groupId ? remoteStatus.membership?.access_granted : remoteStatus.user?.access_granted) ? 'granted' : 'not granted'}
+            </span>
             {' · '}
             Paid: <span className="mono">{remoteStatus.paid ? 'true' : 'false'}</span>
           </p>
         ) : null}
 
-        {remoteStatus?.user?.last_invite_link ? (
+        {remoteStatus?.membership?.last_invite_link ? (
           <p className="loading">
             Invite:{' '}
-            <a href={remoteStatus.user.last_invite_link} target="_blank" rel="noreferrer">
+            <a href={remoteStatus.membership.last_invite_link} target="_blank" rel="noreferrer">
               open link
             </a>
           </p>

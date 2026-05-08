@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url'
 import { getDb } from '../_lib/db.mjs'
 import { getWorkerEnv } from '../_lib/worker-env.mjs'
 import { getWorkerLogger } from '../_lib/logger.mjs'
-import { extractPaymentIntentIdFromComment, extractTelegramIdFromComment, isValidIncomingPayment, parseCommentFromTx } from '../../server/lib/toncenter.js'
+import { extractGroupIdFromComment, extractPaymentIntentIdFromComment, extractTelegramIdFromComment, isValidIncomingPayment, parseCommentFromTx } from '../../server/lib/toncenter.js'
 import { logFailedJob } from '../_lib/failedJobs.mjs'
 import { logEvent } from '../../services/subscriptionEvents.service.mjs'
 import { VerifyPaymentJobSchema, parseJob } from '../_lib/jobSchemas.mjs'
@@ -31,13 +31,11 @@ async function processJob(job) {
   const comment = parseCommentFromTx(tx) || ''
   const telegramId = extractTelegramIdFromComment(comment)
   const intentId = extractPaymentIntentIdFromComment(comment)
+  const groupIdFromComment = extractGroupIdFromComment(comment)
   if (!telegramId || !intentId) return { ok: false, reason: 'Missing tp/pi in comment', txHash }
 
-  const valid = isValidIncomingPayment(tx, { receiverAddress: env.TON_RECEIVER_ADDRESS, minTon: Number(env.TON_PRICE_TON) })
-  if (!valid.ok) return { ok: false, reason: valid.reason, txHash }
-
   const intent = await pool.query(
-    `SELECT id, telegram_id, expected_amount_ton, receiver_address, status, expires_at
+    `SELECT id, telegram_id, group_id, expected_amount_ton, receiver_address, status, expires_at
      FROM payment_intents
      WHERE id = $1`,
     [String(intentId)],
@@ -46,6 +44,16 @@ async function processJob(job) {
 
   const pi = intent.rows[0]
   if (String(pi.telegram_id) !== String(telegramId)) return { ok: false, reason: 'Intent telegram mismatch', txHash }
+  if (pi.group_id && groupIdFromComment && String(pi.group_id) !== String(groupIdFromComment)) {
+    return { ok: false, reason: 'Intent group mismatch', txHash }
+  }
+
+  // Validate recipient + minimum amount using intent fields (multi-tenant safe).
+  const receiverToCheck = pi.receiver_address || env.TON_RECEIVER_ADDRESS
+  const minTon = Number(pi.expected_amount_ton || env.TON_PRICE_TON || '0')
+  if (!receiverToCheck) return { ok: false, reason: 'Missing receiver address', txHash, telegramId, intentId }
+  const valid = isValidIncomingPayment(tx, { receiverAddress: receiverToCheck, minTon })
+  if (!valid.ok) return { ok: false, reason: valid.reason, txHash, telegramId, intentId }
 
   // Expiry check (use on-chain tx time when available to avoid false negatives if our listener/worker is delayed).
   const expiresAtMs = pi.expires_at ? new Date(pi.expires_at).getTime() : null
@@ -85,24 +93,55 @@ async function processJob(job) {
     await pool.query(`UPDATE payment_intents SET status='paid', tx_hash=$2, paid_at=NOW() WHERE id=$1`, [String(intentId), String(txHash)])
 
     await pool.query(
-      `INSERT INTO payments (tx_hash, telegram_id, payment_intent_id, receiver_address, amount_nano, comment, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,NOW())
+      `INSERT INTO payments (tx_hash, telegram_id, group_id, payment_intent_id, receiver_address, amount_nano, comment, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
        ON CONFLICT (tx_hash) DO NOTHING`,
-      [String(txHash), String(telegramId), String(intentId), String(env.TON_RECEIVER_ADDRESS), String(tx?.in_msg?.value || '0'), comment || null],
+      [String(txHash), String(telegramId), pi.group_id ? String(pi.group_id) : null, String(intentId), String(receiverToCheck), String(tx?.in_msg?.value || '0'), comment || null],
     )
 
-    const user = await pool.query(
-      `UPDATE users
-       SET subscription_status='active',
+    let enqueueAccessUserId = null
+    let enqueueAccessTelegramId = String(telegramId)
+    let enqueueAccessMembershipId = null
+    let enqueueAccessGroupId = null
+    let alreadyGranted = false
+
+    // Multi-tenant: update membership if intent is group-scoped.
+    if (pi.group_id) {
+      const membershipId = uuid()
+      const membership = await pool.query(
+        `INSERT INTO memberships (id, group_id, telegram_id, subscription_status, last_payment_at, current_period_end, payment_status, expiry_date, updated_at)
+         VALUES ($1,$2,$3,'active',NOW(), NOW() + INTERVAL '30 days', TRUE, NOW() + INTERVAL '30 days', NOW())
+         ON CONFLICT (group_id, telegram_id) DO UPDATE SET
+           subscription_status='active',
            last_payment_at=NOW(),
-           current_period_end = GREATEST(COALESCE(current_period_end, NOW()), NOW()) + INTERVAL '30 days',
-           payment_status=true,
-           expiry_date = GREATEST(COALESCE(expiry_date, NOW()), NOW()) + INTERVAL '30 days'
-       WHERE telegram_id=$1
-       RETURNING id, telegram_id, access_granted`,
-      [String(telegramId)],
-    )
-    if (!user.rows.length) throw new Error('User not found for telegram_id')
+           current_period_end = GREATEST(COALESCE(memberships.current_period_end, NOW()), NOW()) + INTERVAL '30 days',
+           payment_status=TRUE,
+           expiry_date = GREATEST(COALESCE(memberships.expiry_date, NOW()), NOW()) + INTERVAL '30 days',
+           updated_at=NOW()
+         RETURNING id, access_granted`,
+        [membershipId, String(pi.group_id), String(telegramId)],
+      )
+      enqueueAccessMembershipId = membership.rows[0].id
+      enqueueAccessGroupId = String(pi.group_id)
+      alreadyGranted = membership.rows[0].access_granted === true
+    } else {
+      // Legacy single-tenant: update users table.
+      const user = await pool.query(
+        `UPDATE users
+         SET subscription_status='active',
+             last_payment_at=NOW(),
+             current_period_end = GREATEST(COALESCE(current_period_end, NOW()), NOW()) + INTERVAL '30 days',
+             payment_status=true,
+             expiry_date = GREATEST(COALESCE(expiry_date, NOW()), NOW()) + INTERVAL '30 days'
+         WHERE telegram_id=$1
+         RETURNING id, telegram_id, access_granted`,
+        [String(telegramId)],
+      )
+      if (!user.rows.length) throw new Error('User not found for telegram_id')
+      enqueueAccessUserId = user.rows[0].id
+      enqueueAccessTelegramId = user.rows[0].telegram_id
+      alreadyGranted = user.rows[0].access_granted === true
+    }
 
     await pool.query(
       `INSERT INTO subscription_events (id, telegram_id, type, metadata, created_at)
@@ -120,9 +159,11 @@ async function processJob(job) {
       txHash,
       telegramId,
       intentId,
-      enqueueAccess: Boolean(env.CHANNEL_ID && user.rows[0].access_granted !== true),
-      enqueueAccessUserId: user.rows[0].id,
-      enqueueAccessTelegramId: user.rows[0].telegram_id,
+      enqueueAccess: Boolean((env.CHANNEL_ID || pi.group_id) && alreadyGranted !== true),
+      enqueueAccessUserId,
+      enqueueAccessTelegramId,
+      enqueueAccessMembershipId,
+      enqueueAccessGroupId,
     }
   } catch (e) {
     await pool.query('ROLLBACK')
@@ -139,7 +180,12 @@ export async function processVerifyPaymentJob(job) {
   if (res.enqueueAccess) {
     // Dynamic import to avoid Redis connections at import-time in environments that reuse the processor.
     const { enqueueAccessGrant } = await import('../producers/enqueueAccessGrant.mjs')
-    await enqueueAccessGrant({ userId: res.enqueueAccessUserId, telegramId: res.enqueueAccessTelegramId })
+    await enqueueAccessGrant({
+      userId: res.enqueueAccessUserId,
+      membershipId: res.enqueueAccessMembershipId,
+      groupId: res.enqueueAccessGroupId,
+      telegramId: res.enqueueAccessTelegramId,
+    })
   }
   log.info(
     { jobId: job.id, queue: 'payment-verification', userId: res.telegramId, paymentIntentId: res.intentId, txHash: res.txHash, ...res },

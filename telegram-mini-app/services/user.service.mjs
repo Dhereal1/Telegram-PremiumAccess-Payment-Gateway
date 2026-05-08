@@ -12,3 +12,8 @@ export async function getUserByTelegramId(telegramId) {
   return res.rows[0] || null
 }
 
+export async function getMembershipById(membershipId) {
+  const pool = getPool()
+  const res = await pool.query('SELECT * FROM memberships WHERE id = $1', [String(membershipId)])
+  return res.rows[0] || null
+}

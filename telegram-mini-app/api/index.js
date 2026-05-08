@@ -1,5 +1,8 @@
 import adminReplayJob from '../server/handlers/admin/replay-job.js'
 import adminHealth from '../server/handlers/admin/health.js'
+import adminWalletSet from '../server/handlers/admin/wallet-set.js'
+import adminGroupsCreate from '../server/handlers/admin/groups-create.js'
+import adminGroupsList from '../server/handlers/admin/groups-list.js'
 import authTelegram from '../server/handlers/auth/telegram.js'
 import cronGrantAccess from '../server/handlers/cron/grant-access.js'
 import cronVerifyPayments from '../server/handlers/cron/verify-payments.js'
@@ -79,6 +82,15 @@ export default async function handler(req, res) {
 
       case 'GET /admin/health':
         return adminHealth(req, res)
+
+      case 'POST /admin/wallet/set':
+        return adminWalletSet(req, res)
+
+      case 'POST /admin/groups/create':
+        return adminGroupsCreate(req, res)
+
+      case 'POST /admin/groups/list':
+        return adminGroupsList(req, res)
 
       case 'GET /tonconnect/manifest':
       case 'OPTIONS /tonconnect/manifest':

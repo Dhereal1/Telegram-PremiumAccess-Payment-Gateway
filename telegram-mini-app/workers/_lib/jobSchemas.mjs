@@ -1,7 +1,11 @@
 import { z } from 'zod'
 
 export const AccessGrantJobSchema = z.object({
-  userId: z.union([z.number().int().positive(), z.string().min(1)]),
+  // Legacy: userId references users.id (single-tenant).
+  userId: z.union([z.number().int().positive(), z.string().min(1)]).optional(),
+  // Multi-tenant: membershipId references memberships.id (uuid).
+  membershipId: z.string().min(1).optional(),
+  groupId: z.string().min(1).optional(),
   telegramId: z.string().min(1),
   forceRegenerate: z.boolean().optional()
 })
@@ -24,4 +28,3 @@ export function parseJob(schema, data) {
   }
   return parsed.data
 }
-

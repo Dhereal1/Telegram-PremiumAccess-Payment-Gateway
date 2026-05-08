@@ -77,6 +77,12 @@ export function extractPaymentIntentIdFromComment(comment) {
   return m ? m[1] : null
 }
 
+export function extractGroupIdFromComment(comment) {
+  if (!comment) return null
+  const m = String(comment).match(/(?:^|\s|\|)g:([0-9a-fA-F-]{36})(?:\||\s|$)/)
+  return m ? m[1] : null
+}
+
 export function isValidIncomingPayment(tx, { receiverAddress, minTon }) {
   const msg = tx?.in_msg
   if (!msg) return { ok: false, reason: 'Missing in_msg' }

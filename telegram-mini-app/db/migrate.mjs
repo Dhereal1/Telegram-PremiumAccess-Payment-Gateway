@@ -37,7 +37,6 @@ export async function migrate() {
       await pool.query(sql)
       await pool.query('INSERT INTO schema_migrations (id) VALUES ($1)', [file])
       await pool.query('COMMIT')
-      // eslint-disable-next-line no-console
       console.log(`applied ${file}`)
     } catch (e) {
       await pool.query('ROLLBACK')
@@ -49,11 +48,10 @@ export async function migrate() {
 // Run when invoked directly: `node db/migrate.mjs`
 const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : null
 const thisPath = path.resolve(fileURLToPath(import.meta.url))
-if (invokedPath && invokedPath === thisPath) {
+  if (invokedPath && invokedPath === thisPath) {
   migrate()
     .then(() => process.exit(0))
     .catch((e) => {
-      // eslint-disable-next-line no-console
       console.error(e)
       process.exit(1)
     })
