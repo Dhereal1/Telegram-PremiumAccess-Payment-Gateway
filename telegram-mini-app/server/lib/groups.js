@@ -1,5 +1,17 @@
 import { getPool } from './db.js'
 
+export async function getAdminByTelegramId(adminTelegramId) {
+  const pool = getPool()
+  const r = await pool.query('SELECT * FROM admins WHERE telegram_id=$1', [String(adminTelegramId)])
+  return r.rows[0] || null
+}
+
+export async function getGroupByTelegramChatId(telegramChatId) {
+  const pool = getPool()
+  const r = await pool.query('SELECT * FROM groups WHERE telegram_chat_id=$1', [String(telegramChatId)])
+  return r.rows[0] || null
+}
+
 export async function getGroupById(groupId) {
   const pool = getPool()
   const r = await pool.query('SELECT * FROM groups WHERE id=$1', [String(groupId)])
@@ -41,3 +53,22 @@ export async function createGroup({
   return getGroupById(id)
 }
 
+export async function createGroupIfNotExists({
+  id,
+  telegramChatId,
+  adminTelegramId,
+  name,
+  priceTon,
+  durationDays,
+}) {
+  const pool = getPool()
+  const r = await pool.query(
+    `INSERT INTO groups (id, telegram_chat_id, admin_telegram_id, name, price_ton, duration_days)
+     VALUES ($1,$2,$3,$4,$5,$6)
+     ON CONFLICT (telegram_chat_id) DO NOTHING
+     RETURNING *`,
+    [String(id), String(telegramChatId), String(adminTelegramId), String(name), String(priceTon), Number(durationDays)],
+  )
+  if (r.rows[0]) return r.rows[0]
+  return getGroupByTelegramChatId(telegramChatId)
+}

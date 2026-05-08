@@ -49,7 +49,7 @@ export async function processAccessGrantJob(job) {
         await logEvent({ userId: String(claimed.telegram_id), type: 'invite_regen_requested', metadata: {} }).catch(() => {})
       }
 
-      const inviteLink = await createInviteLink({ chatId, memberLimit: 1, expireSeconds: 3600 })
+      const inviteLink = await createInviteLink({ chatId, memberLimit: 1, expireSeconds: 600 })
       await setMembershipInviteInfo({ membershipId, inviteLink })
       await logEvent({ userId: String(claimed.telegram_id), type: 'invite_sent', metadata: { inviteLink, groupId: String(membership.group_id) } })
 
@@ -84,7 +84,7 @@ export async function processAccessGrantJob(job) {
   }
 
   try {
-    const inviteLink = await createInviteLink({ memberLimit: 1, expireSeconds: 3600 })
+    const inviteLink = await createInviteLink({ memberLimit: 1, expireSeconds: 600 })
     await setInviteInfo({ userId, inviteLink })
     await sendMessage(telegramId, `✅ Payment confirmed!\n\nJoin here:\n${inviteLink}`)
   } catch (e) {

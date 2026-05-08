@@ -67,7 +67,9 @@ function loadStringTailSafe(slice) {
 
 export function extractTelegramIdFromComment(comment) {
   if (!comment) return null
-  const m = String(comment).match(/(?:^|\s|\|)tp:(\d+)(?:\||\s|$)/)
+  const s = String(comment)
+  // Support legacy "tp:" and newer "u:" alias
+  const m = s.match(/(?:^|\s|\|)(?:tp|u):(\d+)(?:\||\s|$)/)
   return m ? m[1] : null
 }
 

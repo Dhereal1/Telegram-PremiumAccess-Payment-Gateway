@@ -1,11 +1,10 @@
-import { Telegraf } from 'telegraf'
 import { readJson } from '../../lib/http.js'
 import crypto from 'crypto'
 import { getLogger } from '../../lib/log.js'
+import { createBot } from '../../bot.mjs'
 
 const log = getLogger()
 let bot
-let botWebAppUrl
 
 function getBot() {
   if (bot) return bot
@@ -15,23 +14,7 @@ function getBot() {
   if (!botToken) throw new Error('Missing BOT_TOKEN env var')
   if (!webAppUrl) throw new Error('Missing WEB_APP_URL env var (must be HTTPS and publicly reachable)')
 
-  botWebAppUrl = webAppUrl
-  bot = new Telegraf(botToken)
-
-  bot.start(async (ctx) => {
-    await ctx.reply('Welcome! Launch the app below:', {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: '🚀 Open App',
-              web_app: { url: botWebAppUrl },
-            },
-          ],
-        ],
-      },
-    })
-  })
+  bot = createBot({ botToken, webAppUrl })
 
   bot.catch((err, ctx) => {
     const updateId = ctx?.update?.update_id

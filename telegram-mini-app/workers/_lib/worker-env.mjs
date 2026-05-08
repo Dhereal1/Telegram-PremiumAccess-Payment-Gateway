@@ -22,6 +22,8 @@ const WorkerEnvSchema = z.object({
 
   TELEGRAM_AUTH_MAX_AGE_SECONDS: z.string().optional(),
 
+  PLATFORM_FEE_PERCENT: z.string().default('10').optional(),
+
   LOG_LEVEL: z.string().optional(),
 });
 

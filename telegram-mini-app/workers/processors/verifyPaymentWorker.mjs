@@ -1,11 +1,13 @@
 import { Worker } from 'bullmq'
 import crypto from 'crypto'
 import { pathToFileURL } from 'node:url'
+import { toNano } from '@ton/core'
 import { getDb } from '../_lib/db.mjs'
 import { getWorkerEnv } from '../_lib/worker-env.mjs'
 import { getWorkerLogger } from '../_lib/logger.mjs'
 import { extractGroupIdFromComment, extractPaymentIntentIdFromComment, extractTelegramIdFromComment, isValidIncomingPayment, parseCommentFromTx } from '../../server/lib/toncenter.js'
 import { logFailedJob } from '../_lib/failedJobs.mjs'
+import { logFraud } from '../_lib/fraudLogs.mjs'
 import { logEvent } from '../../services/subscriptionEvents.service.mjs'
 import { VerifyPaymentJobSchema, parseJob } from '../_lib/jobSchemas.mjs'
 
@@ -15,6 +17,34 @@ const pool = getDb()
 
 function uuid() {
   return crypto.randomUUID()
+}
+
+function toBigIntSafe(v) {
+  try {
+    return BigInt(String(v || '0'))
+  } catch {
+    return 0n
+  }
+}
+
+function nanoToTonString(nano) {
+  const n = typeof nano === 'bigint' ? nano : toBigIntSafe(nano)
+  const sign = n < 0n ? '-' : ''
+  const abs = n < 0n ? -n : n
+  const whole = abs / 1000000000n
+  const frac = abs % 1000000000n
+  const fracStr = frac.toString().padStart(9, '0').replace(/0+$/, '')
+  return fracStr ? `${sign}${whole.toString()}.${fracStr}` : `${sign}${whole.toString()}`
+}
+
+function isExactAmount(tx, expectedTon) {
+  try {
+    const value = toBigIntSafe(tx?.in_msg?.value || '0')
+    const expected = BigInt(toNano(Number(expectedTon)).toString())
+    return value === expected
+  } catch {
+    return false
+  }
 }
 
 async function processJob(job) {
@@ -32,7 +62,10 @@ async function processJob(job) {
   const telegramId = extractTelegramIdFromComment(comment)
   const intentId = extractPaymentIntentIdFromComment(comment)
   const groupIdFromComment = extractGroupIdFromComment(comment)
-  if (!telegramId || !intentId) return { ok: false, reason: 'Missing tp/pi in comment', txHash }
+  if (!telegramId || !intentId) {
+    await logFraud({ pool, txHash, reason: 'missing_tp_pi', metadata: { comment } })
+    return { ok: false, reason: 'Missing tp/pi in comment', txHash }
+  }
 
   const intent = await pool.query(
     `SELECT id, telegram_id, group_id, expected_amount_ton, receiver_address, status, expires_at
@@ -40,41 +73,48 @@ async function processJob(job) {
      WHERE id = $1`,
     [String(intentId)],
   )
-  if (!intent.rows.length) return { ok: false, reason: 'Payment intent not found', txHash }
+  if (!intent.rows.length) {
+    await logFraud({ pool, telegramId, paymentIntentId: intentId, txHash, reason: 'intent_not_found', metadata: { comment } })
+    return { ok: false, reason: 'Payment intent not found', txHash }
+  }
 
   const pi = intent.rows[0]
-  if (String(pi.telegram_id) !== String(telegramId)) return { ok: false, reason: 'Intent telegram mismatch', txHash }
-  if (pi.group_id && groupIdFromComment && String(pi.group_id) !== String(groupIdFromComment)) {
-    return { ok: false, reason: 'Intent group mismatch', txHash }
+  if (String(pi.telegram_id) !== String(telegramId)) {
+    await logFraud({ pool, telegramId, groupId: pi.group_id, paymentIntentId: intentId, txHash, reason: 'intent_telegram_mismatch', metadata: { comment } })
+    return { ok: false, reason: 'Intent telegram mismatch', txHash }
+  }
+
+  // Strict group mapping: if intent is group-scoped, comment must include matching group id.
+  if (pi.group_id) {
+    if (!groupIdFromComment) {
+      await logFraud({ pool, telegramId, groupId: pi.group_id, paymentIntentId: intentId, txHash, reason: 'missing_group_in_comment', metadata: { comment } })
+      return { ok: false, reason: 'Missing group id in comment', txHash }
+    }
+    if (String(pi.group_id) !== String(groupIdFromComment)) {
+      await logFraud({ pool, telegramId, groupId: pi.group_id, paymentIntentId: intentId, txHash, reason: 'intent_group_mismatch', metadata: { comment } })
+      return { ok: false, reason: 'Intent group mismatch', txHash }
+    }
   }
 
   // Validate recipient + minimum amount using intent fields (multi-tenant safe).
   const receiverToCheck = pi.receiver_address || env.TON_RECEIVER_ADDRESS
-  const minTon = Number(pi.expected_amount_ton || env.TON_PRICE_TON || '0')
+  const expectedTon = Number(pi.expected_amount_ton || env.TON_PRICE_TON || '0')
   if (!receiverToCheck) return { ok: false, reason: 'Missing receiver address', txHash, telegramId, intentId }
-  const valid = isValidIncomingPayment(tx, { receiverAddress: receiverToCheck, minTon })
+  const valid = isValidIncomingPayment(tx, { receiverAddress: receiverToCheck, minTon: expectedTon })
   if (!valid.ok) return { ok: false, reason: valid.reason, txHash, telegramId, intentId }
+  if (!isExactAmount(tx, expectedTon)) {
+    await logFraud({ pool, telegramId, groupId: pi.group_id, paymentIntentId: intentId, txHash, reason: 'amount_mismatch', metadata: { expectedTon } })
+    return { ok: false, reason: 'Amount mismatch', txHash, telegramId, intentId }
+  }
 
-  // Expiry check (use on-chain tx time when available to avoid false negatives if our listener/worker is delayed).
+  // Strict matching: only pending intents can be paid.
+  if (pi.status !== 'pending') return { ok: true, status: `intent_${pi.status}`, txHash, telegramId, intentId }
+
   const expiresAtMs = pi.expires_at ? new Date(pi.expires_at).getTime() : null
-  const txTimeMs = typeof tx?.utime === 'number' ? tx.utime * 1000 : null
-  const expiryGraceMs = Number(process.env.PAYMENT_INTENT_EXPIRY_GRACE_MS || String(5 * 60 * 1000))
-  const isExpiredByNow = expiresAtMs != null && expiresAtMs < Date.now()
-  const isExpiredByTxTime = expiresAtMs != null && txTimeMs != null && txTimeMs > (expiresAtMs + expiryGraceMs)
-
-  // If intent is already expired, still accept payments that were made "close enough" to expiry.
-  // This handles "payment confirmed late" scenarios without weakening matching rules.
-  const allowLateExpiredIntent =
-    pi.status === 'expired' && expiresAtMs != null && txTimeMs != null && txTimeMs <= (expiresAtMs + expiryGraceMs)
-
-  if (!allowLateExpiredIntent) {
-    if (pi.status === 'paid') return { ok: true, status: 'intent_paid', txHash, telegramId, intentId }
-    if (pi.status !== 'pending') return { ok: true, status: `intent_${pi.status}`, txHash, telegramId, intentId }
-
-    if (isExpiredByTxTime || isExpiredByNow) {
-      await pool.query(`UPDATE payment_intents SET status='expired' WHERE id=$1 AND status='pending'`, [String(intentId)])
-      return { ok: false, reason: 'Intent expired', txHash, telegramId, intentId }
-    }
+  if (expiresAtMs != null && expiresAtMs < Date.now()) {
+    await pool.query(`UPDATE payment_intents SET status='expired' WHERE id=$1 AND status='pending'`, [String(intentId)])
+    await logFraud({ pool, telegramId, groupId: pi.group_id, paymentIntentId: intentId, txHash, reason: 'intent_expired', metadata: {} })
+    return { ok: false, reason: 'Intent expired', txHash, telegramId, intentId }
   }
 
   await pool.query('BEGIN')
@@ -83,11 +123,8 @@ async function processJob(job) {
     const locked = await pool.query(`SELECT status FROM payment_intents WHERE id=$1 FOR UPDATE`, [String(intentId)])
     if (!locked.rows.length) throw new Error('Intent disappeared')
     if (locked.rows[0].status !== 'pending') {
-      // Permit late processing if the intent expired but the tx was within the grace window.
-      if (!(locked.rows[0].status === 'expired' && allowLateExpiredIntent)) {
-        await pool.query('ROLLBACK')
-        return { ok: true, status: `intent_${locked.rows[0].status}`, txHash, telegramId, intentId }
-      }
+      await pool.query('ROLLBACK')
+      return { ok: true, status: `intent_${locked.rows[0].status}`, txHash, telegramId, intentId }
     }
 
     await pool.query(`UPDATE payment_intents SET status='paid', tx_hash=$2, paid_at=NOW() WHERE id=$1`, [String(intentId), String(txHash)])
@@ -98,6 +135,35 @@ async function processJob(job) {
        ON CONFLICT (tx_hash) DO NOTHING`,
       [String(txHash), String(telegramId), pi.group_id ? String(pi.group_id) : null, String(intentId), String(receiverToCheck), String(tx?.in_msg?.value || '0'), comment || null],
     )
+
+    // Platform fee + admin earnings (multi-tenant groups only)
+    if (pi.group_id) {
+      const g = await pool.query(`SELECT admin_telegram_id FROM groups WHERE id=$1`, [String(pi.group_id)])
+      const adminId = g.rows[0]?.admin_telegram_id ? String(g.rows[0].admin_telegram_id) : null
+      if (adminId) {
+        const amountNano = toBigIntSafe(tx?.in_msg?.value || '0')
+        const feePct = Number(process.env.PLATFORM_FEE_PERCENT || env.PLATFORM_FEE_PERCENT || '10')
+        const feePctInt = Number.isFinite(feePct) && feePct >= 0 ? Math.floor(feePct) : 10
+
+        const platformFeeNano = (amountNano * BigInt(feePctInt)) / 100n
+        const adminAmountNano = amountNano - platformFeeNano
+
+        await pool.query(
+          `INSERT INTO earnings (id, admin_id, group_id, payment_id, total_amount, platform_fee, admin_amount, status, created_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,'pending',NOW())
+           ON CONFLICT (payment_id) DO NOTHING`,
+          [
+            uuid(),
+            adminId,
+            String(pi.group_id),
+            String(txHash),
+            nanoToTonString(amountNano),
+            nanoToTonString(platformFeeNano),
+            nanoToTonString(adminAmountNano),
+          ],
+        )
+      }
+    }
 
     let enqueueAccessUserId = null
     let enqueueAccessTelegramId = String(telegramId)

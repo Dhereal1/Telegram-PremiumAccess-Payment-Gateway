@@ -20,6 +20,9 @@ const EnvSchema = z.object({
 
   // Optional auth for manual cron triggers / internal endpoints
   CRON_SECRET: z.string().optional(),
+
+  // Platform fee
+  PLATFORM_FEE_PERCENT: z.string().optional(),
 })
 
 export function getEnv() {
@@ -36,4 +39,3 @@ export function requireRedisUrl() {
   if (!env.REDIS_URL) throw new Error('Missing REDIS_URL')
   return env.REDIS_URL
 }
-

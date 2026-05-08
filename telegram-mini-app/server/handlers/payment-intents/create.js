@@ -38,6 +38,14 @@ export default async function handler(req, res) {
     const tgUser = parseTelegramUser(initData)
     if (!tgUser?.id) return res.status(400).json({ error: 'Missing Telegram user in initData' })
 
+    // Rate limit per Telegram user (anti-spam / abuse). Best-effort when Redis is available.
+    try {
+      const rlUser = await rateLimit({ key: `pi_u:${String(tgUser.id)}`, limit: 3, windowSeconds: 60 })
+      if (!rlUser.ok) return res.status(429).json({ error: 'Too many payment intents, slow down' })
+    } catch {
+      // If REDIS_URL not set, skip rate limiting (dev)
+    }
+
     const intentId = crypto.randomUUID()
     const now = new Date()
     // Allow plenty of time for wallet UX + network confirmation.

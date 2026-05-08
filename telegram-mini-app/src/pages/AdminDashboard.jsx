@@ -13,6 +13,8 @@ function AdminDashboard({ tg }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [groups, setGroups] = useState([])
+  const [earnings, setEarnings] = useState(null)
+  const [withdrawing, setWithdrawing] = useState(false)
 
   const [modalOpen, setModalOpen] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -33,13 +35,20 @@ function AdminDashboard({ tg }) {
       try {
         setLoading(true)
         setError(null)
-        const resp = await fetch('/api/admin/groups/full', {
-          method: 'GET',
-          headers: { 'x-telegram-init-data': initData },
-        })
-        const data = await resp.json().catch(() => null)
-        if (!resp.ok) throw new Error(data?.error || `Load failed (${resp.status})`)
-        if (!cancelled) setGroups(Array.isArray(data) ? data : [])
+        const [groupsResp, earningsResp] = await Promise.all([
+          fetch('/api/admin/groups/full', { method: 'GET', headers: { 'x-telegram-init-data': initData } }),
+          fetch('/api/admin/earnings', { method: 'GET', headers: { 'x-telegram-init-data': initData } }),
+        ])
+
+        const groupsData = await groupsResp.json().catch(() => null)
+        if (!groupsResp.ok) throw new Error(groupsData?.error || `Load failed (${groupsResp.status})`)
+
+        const earningsData = await earningsResp.json().catch(() => null)
+        if (earningsResp.ok) {
+          if (!cancelled) setEarnings(earningsData || null)
+        }
+
+        if (!cancelled) setGroups(Array.isArray(groupsData) ? groupsData : [])
       } catch (e) {
         if (!cancelled) setError(String(e?.message || e))
       } finally {
@@ -61,6 +70,37 @@ function AdminDashboard({ tg }) {
     const data = await resp.json().catch(() => null)
     if (!resp.ok) throw new Error(data?.error || `Load failed (${resp.status})`)
     setGroups(Array.isArray(data) ? data : [])
+  }
+
+  async function refreshEarnings() {
+    const resp = await fetch('/api/admin/earnings', {
+      method: 'GET',
+      headers: { 'x-telegram-init-data': initData },
+    })
+    const data = await resp.json().catch(() => null)
+    if (!resp.ok) throw new Error(data?.error || `Load failed (${resp.status})`)
+    setEarnings(data || null)
+  }
+
+  async function withdraw() {
+    try {
+      setWithdrawing(true)
+      const resp = await fetch('/api/admin/payout/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData }),
+      })
+      const data = await resp.json().catch(() => null)
+      if (!resp.ok) throw new Error(data?.error || `Withdraw failed (${resp.status})`)
+      setToast(`Withdrawal requested ✅ (${data.updated || 0} earnings)`)
+      setTimeout(() => setToast(null), 2000)
+      await refreshEarnings()
+    } catch (e) {
+      setToast(String(e?.message || e))
+      setTimeout(() => setToast(null), 2500)
+    } finally {
+      setWithdrawing(false)
+    }
   }
 
   async function copy(text) {
@@ -108,7 +148,45 @@ function AdminDashboard({ tg }) {
   }
 
   return (
-    <section className="card">
+    <section className="card" style={{ display: 'grid', gap: 12 }}>
+      <section className="card">
+        <div className="row" style={{ alignItems: 'center' }}>
+          <div>
+            <div className="label" style={{ fontSize: 16 }}>
+              💰 Earnings
+            </div>
+            <div className="loading">Platform fees deducted automatically.</div>
+          </div>
+          <div style={{ marginLeft: 'auto' }}>
+            <button className="payBtn" onClick={withdraw} disabled={withdrawing || !earnings || (earnings?.pending_balance || 0) <= 0}>
+              {withdrawing ? 'Withdrawing…' : 'Withdraw'}
+            </button>
+          </div>
+        </div>
+
+        {earnings ? (
+          <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+            <div className="row">
+              <span className="label">Total Earned</span>
+              <span className="value">{earnings.total_earned} TON</span>
+            </div>
+            <div className="row">
+              <span className="label">Pending Balance</span>
+              <span className="value">{earnings.pending_balance} TON</span>
+            </div>
+            <div className="row">
+              <span className="label">Paid Out</span>
+              <span className="value">{earnings.total_paid_out} TON</span>
+            </div>
+          </div>
+        ) : (
+          <div className="loading" style={{ marginTop: 10 }}>
+            Loading earnings…
+          </div>
+        )}
+      </section>
+
+      <section className="card">
       <div className="row" style={{ alignItems: 'center' }}>
         <div>
           <div className="label" style={{ fontSize: 16 }}>
@@ -249,9 +327,9 @@ function AdminDashboard({ tg }) {
           </div>
         </div>
       ) : null}
+      </section>
     </section>
   )
 }
 
 export default AdminDashboard
-
