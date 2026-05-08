@@ -22,6 +22,14 @@ Telegram Mini Apps require **HTTPS**. For testing inside Telegram:
 - Expose your dev server with a tunnel (ngrok / Cloudflare Tunnel), or
 - Deploy to Vercel early.
 
+### ngrok (recommended locally)
+This repo can run `ngrok` via `ecosystem.config.cjs`. Since ngrok free URLs change on restart, sync `WEB_APP_URL` automatically:
+
+```powershell
+cd telegram-mini-app
+powershell -ExecutionPolicy Bypass -File .\scripts\dev\sync-webapp-url-ngrok.ps1
+```
+
 ## Vercel (single repo deploy)
 
 Recommended setup: create **one Vercel project** and set **Root Directory** to `telegram-mini-app`.
