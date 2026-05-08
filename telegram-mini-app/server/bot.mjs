@@ -70,8 +70,30 @@ function parseStartPayload(payload) {
 
 function parseGroupPayload(payload) {
   const p = String(payload || '')
-  const m = p.match(/^g_([0-9a-fA-F-]{36})$/)
-  return m ? m[1] : null
+  // Support:
+  // - g_<uuid>
+  // - g_<slug>_<uuid> (display-friendly, still deterministic)
+  const m1 = p.match(/^g_([0-9a-fA-F-]{36})$/)
+  if (m1) return m1[1]
+  const m2 = p.match(/^g_[a-z0-9_-]{1,50}_([0-9a-fA-F-]{36})$/i)
+  return m2 ? m2[1] : null
+}
+
+function slugifyGroupName(name) {
+  const s = String(name || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+  return s.slice(0, 40) || 'group'
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
 
 async function safeDmOrGroupNotice({ ctx, botUsername, adminId, chatId }) {
@@ -325,10 +347,13 @@ export function createBot({ botToken, webAppUrl }) {
 
       await deleteOnboardingSession({ adminId, telegramChatId })
       const botUsername = await getBotUsername()
-      const link = botUsername
-        ? makeBotDeepLink({ botUsername, groupId: group.id })
+      const deepLink = botUsername
+        ? `https://t.me/${botUsername}?start=${encodeURIComponent(`g_${slugifyGroupName(group.name)}_${String(group.id)}`)}`
         : makeMiniAppGroupUrl(normalizedWebAppUrl, group.id)
-      await ctx.reply(`✅ Your premium group is ready!\n\n🔗 Your subscription link:\n${link}\n\nShare this with your audience to start earning.`)
+
+      // Use HTML anchor so the "link" appears with the group name.
+      const text = `✅ Your premium group is ready!\n\n🔗 Subscription link for <b>${escapeHtml(group.name)}</b>:\n<a href="${escapeHtml(deepLink)}">${escapeHtml(group.name)}</a>\n\nShare this with your audience to start earning.`
+      await ctx.reply(text, { parse_mode: 'HTML', disable_web_page_preview: true })
       return
     }
 
@@ -355,10 +380,12 @@ export function createBot({ botToken, webAppUrl }) {
 
       await deleteOnboardingSession({ adminId, telegramChatId })
       const botUsername = await getBotUsername()
-      const link = botUsername
-        ? makeBotDeepLink({ botUsername, groupId: group.id })
+      const deepLink = botUsername
+        ? `https://t.me/${botUsername}?start=${encodeURIComponent(`g_${slugifyGroupName(group.name)}_${String(group.id)}`)}`
         : makeMiniAppGroupUrl(normalizedWebAppUrl, group.id)
-      await ctx.reply(`✅ Your premium group is ready!\n\n🔗 Your subscription link:\n${link}\n\nShare this with your audience to start earning.`)
+
+      const text = `✅ Your premium group is ready!\n\n🔗 Subscription link for <b>${escapeHtml(group.name)}</b>:\n<a href="${escapeHtml(deepLink)}">${escapeHtml(group.name)}</a>\n\nShare this with your audience to start earning.`
+      await ctx.reply(text, { parse_mode: 'HTML', disable_web_page_preview: true })
       return
     }
   })
