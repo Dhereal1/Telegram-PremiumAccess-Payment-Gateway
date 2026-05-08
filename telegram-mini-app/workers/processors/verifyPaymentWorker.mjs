@@ -50,12 +50,13 @@ async function processJob(job) {
   // Expiry check (use on-chain tx time when available to avoid false negatives if our listener/worker is delayed).
   const expiresAtMs = pi.expires_at ? new Date(pi.expires_at).getTime() : null
   const txTimeMs = typeof tx?.utime === 'number' ? tx.utime * 1000 : null
+  const expiryGraceMs = Number(process.env.PAYMENT_INTENT_EXPIRY_GRACE_MS || String(5 * 60 * 1000))
   const isExpiredByNow = expiresAtMs != null && expiresAtMs < Date.now()
-  const isExpiredByTxTime = expiresAtMs != null && txTimeMs != null && txTimeMs > expiresAtMs
+  const isExpiredByTxTime = expiresAtMs != null && txTimeMs != null && txTimeMs > (expiresAtMs + expiryGraceMs)
 
   // If intent is already expired, still accept payments that were made BEFORE expiry (tx.utime <= expires_at).
   // This handles "payment confirmed late" scenarios without weakening matching rules.
-  if (pi.status === 'expired' && expiresAtMs != null && txTimeMs != null && txTimeMs <= expiresAtMs) {
+  if (pi.status === 'expired' && expiresAtMs != null && txTimeMs != null && txTimeMs <= (expiresAtMs + expiryGraceMs)) {
     // Treat as pending for this job and continue to mark paid transactionally.
   } else {
     if (pi.status === 'paid') return { ok: true, status: 'intent_paid', txHash, telegramId, intentId }
