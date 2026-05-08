@@ -1,11 +1,17 @@
 $ErrorActionPreference = 'Stop'
 
 param(
-  [string]$EnvPath = "$PSScriptRoot\..\..\.env",
-  [string]$NgrokApi = "http://127.0.0.1:4040/api/tunnels",
-  [string]$ProcessWeb = "local-web",
-  [string]$ProcessBot = "local-bot"
+  [string]$EnvPath,
+  [string]$NgrokApi,
+  [string]$ProcessWeb,
+  [string]$ProcessBot
 )
+
+$here = Split-Path -Parent $MyInvocation.MyCommand.Path
+if (-not $EnvPath) { $EnvPath = Join-Path $here "..\\..\\.env" }
+if (-not $NgrokApi) { $NgrokApi = "http://127.0.0.1:4040/api/tunnels" }
+if (-not $ProcessWeb) { $ProcessWeb = "local-web" }
+if (-not $ProcessBot) { $ProcessBot = "local-bot" }
 
 function Get-NgrokPublicUrl {
   try {
@@ -56,4 +62,3 @@ Write-Host "Restarting PM2 processes: $ProcessWeb, $ProcessBot"
 & npx pm2 restart $ProcessBot --update-env | Out-Null
 
 Write-Host "Done."
-
