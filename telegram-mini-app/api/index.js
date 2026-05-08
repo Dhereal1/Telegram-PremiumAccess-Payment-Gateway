@@ -1,4 +1,5 @@
 import adminReplayJob from '../server/handlers/admin/replay-job.js'
+import adminHealth from '../server/handlers/admin/health.js'
 import authTelegram from '../server/handlers/auth/telegram.js'
 import cronGrantAccess from '../server/handlers/cron/grant-access.js'
 import cronVerifyPayments from '../server/handlers/cron/verify-payments.js'
@@ -75,6 +76,9 @@ export default async function handler(req, res) {
 
       case 'POST /admin/replay-job':
         return adminReplayJob(req, res)
+
+      case 'GET /admin/health':
+        return adminHealth(req, res)
 
       case 'GET /tonconnect/manifest':
       case 'OPTIONS /tonconnect/manifest':
