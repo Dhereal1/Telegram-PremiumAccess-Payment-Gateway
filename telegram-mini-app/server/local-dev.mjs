@@ -26,10 +26,17 @@ async function main() {
 
   // Vite dev server in middleware mode so / and assets are served from source with HMR.
   const vite = await createViteServer({
-    server: { middlewareMode: true },
+    server: { middlewareMode: true, allowedHosts: true },
     appType: 'custom',
   })
   app.use(vite.middlewares)
+  app.use(async (req, res) => {
+    const fs = await import('node:fs')
+    const path2 = await import('node:path')
+    let html = fs.default.readFileSync(path2.default.resolve(process.cwd(), 'index.html'), 'utf-8')
+    html = await vite.transformIndexHtml(req.url, html)
+    res.status(200).set({ 'Content-Type': 'text/html' }).end(html)
+  })
 
   app.listen(port, () => {
     console.log(`[local-dev] running on http://localhost:${port}`)
