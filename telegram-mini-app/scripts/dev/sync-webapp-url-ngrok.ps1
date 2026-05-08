@@ -58,7 +58,7 @@ Set-DotEnvKeyValue -path $EnvPath -key "WEB_APP_URL" -value $publicUrl
 Write-Host "Updated WEB_APP_URL in $EnvPath"
 
 Write-Host "Restarting PM2 processes: $ProcessWeb, $ProcessBot"
-& npx pm2 restart $ProcessWeb --update-env | Out-Null
-& npx pm2 restart $ProcessBot --update-env | Out-Null
+& npx --yes pm2 restart $ProcessWeb --update-env | Out-Null
+& npx --yes pm2 restart $ProcessBot --update-env | Out-Null
 
 Write-Host "Done."
