@@ -1,7 +1,7 @@
 export function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,x-telegram-init-data')
 }
 
 export async function readJson(req) {
@@ -29,4 +29,3 @@ export function requireCronAuth(req) {
   if (typeof provided !== 'string' || provided !== secret) return { ok: false }
   return { ok: true, mode: 'secret-header' }
 }
-

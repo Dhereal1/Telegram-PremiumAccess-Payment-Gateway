@@ -3,6 +3,8 @@ import adminHealth from '../server/handlers/admin/health.js'
 import adminWalletSet from '../server/handlers/admin/wallet-set.js'
 import adminGroupsCreate from '../server/handlers/admin/groups-create.js'
 import adminGroupsList from '../server/handlers/admin/groups-list.js'
+import adminGroupsFull from '../server/handlers/admin/groups-full.js'
+import adminGroupMembers from '../server/handlers/admin/group-members.js'
 import authTelegram from '../server/handlers/auth/telegram.js'
 import cronGrantAccess from '../server/handlers/cron/grant-access.js'
 import cronVerifyPayments from '../server/handlers/cron/verify-payments.js'
@@ -45,6 +47,12 @@ export default async function handler(req, res) {
       if (m) {
         ensureQueryParam(req, 'telegram_id', decodeURIComponent(m[1]))
         return userStatusTelegramId(req, res)
+      }
+
+      const gm = path.match(/^\/admin\/groups\/([^/]+)\/members$/)
+      if (gm) {
+        ensureQueryParam(req, 'groupId', decodeURIComponent(gm[1]))
+        return adminGroupMembers(req, res)
       }
     }
 
@@ -91,6 +99,9 @@ export default async function handler(req, res) {
 
       case 'POST /admin/groups/list':
         return adminGroupsList(req, res)
+
+      case 'GET /admin/groups/full':
+        return adminGroupsFull(req, res)
 
       case 'GET /tonconnect/manifest':
       case 'OPTIONS /tonconnect/manifest':

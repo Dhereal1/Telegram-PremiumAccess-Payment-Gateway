@@ -10,6 +10,14 @@ function App() {
 
   const tg = useMemo(() => window.Telegram?.WebApp, [])
   const isTelegram = Boolean(tg)
+  const isAdminView = useMemo(() => {
+    try {
+      const p = new URLSearchParams(window.location.search)
+      return p.get('admin') === '1'
+    } catch {
+      return false
+    }
+  }, [])
 
   useEffect(() => {
     function onError(event) {
@@ -83,6 +91,7 @@ function App() {
   }, [tg])
 
   const [tonUiState, setTonUiState] = useState({ status: 'loading', Component: null, error: null })
+  const [adminUiState, setAdminUiState] = useState({ status: 'idle', Component: null, error: null })
 
   useEffect(() => {
     let cancelled = false
@@ -99,6 +108,24 @@ function App() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!isAdminView) return
+    let cancelled = false
+    async function load() {
+      try {
+        setAdminUiState({ status: 'loading', Component: null, error: null })
+        const mod = await import('./pages/AdminDashboard.jsx')
+        if (!cancelled) setAdminUiState({ status: 'ready', Component: mod.default, error: null })
+      } catch (e) {
+        if (!cancelled) setAdminUiState({ status: 'error', Component: null, error: String(e?.message || e) })
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [isAdminView])
 
   return (
     <div className="app">
@@ -131,7 +158,22 @@ function App() {
         )}
       </main>
 
-      {tonUiState.status === 'ready' ? (
+      {isAdminView ? (
+        adminUiState.status === 'ready' ? (
+          (() => {
+            const AdminDashboard = adminUiState.Component
+            return <AdminDashboard tg={tg} />
+          })()
+        ) : adminUiState.status === 'error' ? (
+          <section className="card">
+            <p className="loading">Admin UI failed to load: {adminUiState.error}</p>
+          </section>
+        ) : (
+          <section className="card">
+            <p className="loading">Loading admin dashboard…</p>
+          </section>
+        )
+      ) : tonUiState.status === 'ready' ? (
         (() => {
           const TonSection = tonUiState.Component
           return <TonSection user={user} tg={tg} />
