@@ -282,8 +282,8 @@ export function createBot({ botToken, webAppUrl }) {
     const adminId = String(ctx.from?.id || '')
     if (!adminId) return
 
-    const text = String(ctx.message?.text || '').trim()
-    if (!text) return
+    const inputText = String(ctx.message?.text || '').trim()
+    if (!inputText) return
 
     // Only drive onboarding through private chat messages to avoid leaking config in groups.
     if (ctx.chat?.type !== 'private') return
@@ -303,7 +303,7 @@ export function createBot({ botToken, webAppUrl }) {
     const data = session.collected_data || {}
 
     if (step === 'awaiting_price') {
-      const price = parsePositiveNumber(text)
+      const price = parsePositiveNumber(inputText)
       if (price == null) {
         await ctx.reply('Please enter a valid number (example: 0.1).')
         return
@@ -315,7 +315,7 @@ export function createBot({ botToken, webAppUrl }) {
     }
 
     if (step === 'awaiting_duration') {
-      const days = parsePositiveInt(text)
+      const days = parsePositiveInt(inputText)
       if (days == null) {
         await ctx.reply('Please enter a valid number of days (example: 30).')
         return
@@ -327,7 +327,7 @@ export function createBot({ botToken, webAppUrl }) {
     }
 
     if (step === 'awaiting_name') {
-      const name = text.slice(0, 120)
+      const name = inputText.slice(0, 120)
       data.name = name
 
       const admin = await getAdminByTelegramId(adminId)
@@ -354,13 +354,13 @@ export function createBot({ botToken, webAppUrl }) {
         : makeMiniAppGroupUrl(normalizedWebAppUrl, group.id)
 
       // Use HTML anchor so the "link" appears with the group name.
-      const text = `✅ Your premium group is ready!\n\n🔗 Subscription link for <b>${escapeHtml(group.name)}</b>:\n<a href="${escapeHtml(deepLink)}">${escapeHtml(group.name)}</a>\n\nShare this with your audience to start earning.`
-      await ctx.reply(text, { parse_mode: 'HTML', disable_web_page_preview: true })
+      const messageText = `✅ Your premium group is ready!\n\n🔗 Subscription link for <b>${escapeHtml(group.name)}</b>:\n<a href="${escapeHtml(deepLink)}">${escapeHtml(group.name)}</a>\n\nShare this with your audience to start earning.`
+      await ctx.reply(messageText, { parse_mode: 'HTML', disable_web_page_preview: true })
       return
     }
 
     if (step === 'awaiting_wallet') {
-      const walletRaw = String(text).trim()
+      const walletRaw = String(inputText).trim()
       const normalized = normalizeTonAddress(walletRaw)
       if (!normalized) {
         await ctx.reply('That does not look like a valid TON address. Please paste a valid wallet address (starts with EQ…/UQ…).')
@@ -386,8 +386,8 @@ export function createBot({ botToken, webAppUrl }) {
         ? `https://t.me/${botUsername}?start=${encodeURIComponent(`g_${slugifyGroupName(group.name)}_${String(group.id)}`)}`
         : makeMiniAppGroupUrl(normalizedWebAppUrl, group.id)
 
-      const text = `✅ Your premium group is ready!\n\n🔗 Subscription link for <b>${escapeHtml(group.name)}</b>:\n<a href="${escapeHtml(deepLink)}">${escapeHtml(group.name)}</a>\n\nShare this with your audience to start earning.`
-      await ctx.reply(text, { parse_mode: 'HTML', disable_web_page_preview: true })
+      const messageText = `✅ Your premium group is ready!\n\n🔗 Subscription link for <b>${escapeHtml(group.name)}</b>:\n<a href="${escapeHtml(deepLink)}">${escapeHtml(group.name)}</a>\n\nShare this with your audience to start earning.`
+      await ctx.reply(messageText, { parse_mode: 'HTML', disable_web_page_preview: true })
       return
     }
   })

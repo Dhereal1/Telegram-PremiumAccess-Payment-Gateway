@@ -3,9 +3,16 @@
 
 const path = require('path');
 const { spawn } = require('child_process');
+const dns = require('dns');
 
 // Always load the repo-local env file for workers.
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
+
+// Reduce intermittent Windows/ISP DNS flakiness (IPv6 AAAA first) for Redis/Neon/TonCenter.
+// Node >= 17 supports this API.
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch {}
 
 const script = process.argv[2];
 if (!script) {
