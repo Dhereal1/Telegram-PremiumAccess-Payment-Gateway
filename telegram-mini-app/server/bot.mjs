@@ -120,8 +120,10 @@ export function createBot({ botToken, webAppUrl }) {
   const normalizedWebAppUrl = normalizeWebAppUrl(webAppUrl)
   const bot = new Telegraf(botToken)
 
-  // Ensure botInfo is populated even when using webhooks (no .launch()).
-  bot.telegram.getMe().then((me) => { bot.botInfo = me }).catch(() => {})
+  // Only fetch bot info when needed (avoids hard-failing on transient DNS issues).
+  if (!process.env.BOT_USERNAME) {
+    bot.telegram.getMe().then((me) => { bot.botInfo = me }).catch(() => {})
+  }
 
   async function getBotUsername() {
     if (process.env.BOT_USERNAME) return String(process.env.BOT_USERNAME).replace(/^@/, '')

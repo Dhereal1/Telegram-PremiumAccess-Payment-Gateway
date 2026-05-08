@@ -1,6 +1,18 @@
 module.exports = {
   apps: [
     {
+      name: 'local-web',
+      script: 'server/local-dev.mjs',
+      interpreter: 'node',
+      cwd: __dirname,
+    },
+    {
+      name: 'local-bot',
+      script: 'server/local-bot.mjs',
+      interpreter: 'node',
+      cwd: __dirname,
+    },
+    {
       name: 'verify-payments',
       script: 'workers/_lib/pm2-loader.cjs',
       args: 'workers/processors/verifyPaymentWorker.mjs',
@@ -37,4 +49,3 @@ module.exports = {
     },
   ],
 };
-
