@@ -46,13 +46,25 @@ async function processJob(job) {
 
   const pi = intent.rows[0]
   if (String(pi.telegram_id) !== String(telegramId)) return { ok: false, reason: 'Intent telegram mismatch', txHash }
-  if (pi.status === 'paid') return { ok: true, status: 'intent_paid', txHash, telegramId, intentId }
-  if (pi.status !== 'pending') return { ok: true, status: `intent_${pi.status}`, txHash, telegramId, intentId }
 
-  // Expiry check
-  if (pi.expires_at && new Date(pi.expires_at).getTime() < Date.now()) {
-    await pool.query(`UPDATE payment_intents SET status='expired' WHERE id=$1 AND status='pending'`, [String(intentId)])
-    return { ok: false, reason: 'Intent expired', txHash, telegramId, intentId }
+  // Expiry check (use on-chain tx time when available to avoid false negatives if our listener/worker is delayed).
+  const expiresAtMs = pi.expires_at ? new Date(pi.expires_at).getTime() : null
+  const txTimeMs = typeof tx?.utime === 'number' ? tx.utime * 1000 : null
+  const isExpiredByNow = expiresAtMs != null && expiresAtMs < Date.now()
+  const isExpiredByTxTime = expiresAtMs != null && txTimeMs != null && txTimeMs > expiresAtMs
+
+  // If intent is already expired, still accept payments that were made BEFORE expiry (tx.utime <= expires_at).
+  // This handles "payment confirmed late" scenarios without weakening matching rules.
+  if (pi.status === 'expired' && expiresAtMs != null && txTimeMs != null && txTimeMs <= expiresAtMs) {
+    // Treat as pending for this job and continue to mark paid transactionally.
+  } else {
+    if (pi.status === 'paid') return { ok: true, status: 'intent_paid', txHash, telegramId, intentId }
+    if (pi.status !== 'pending') return { ok: true, status: `intent_${pi.status}`, txHash, telegramId, intentId }
+
+    if (isExpiredByTxTime || isExpiredByNow) {
+      await pool.query(`UPDATE payment_intents SET status='expired' WHERE id=$1 AND status='pending'`, [String(intentId)])
+      return { ok: false, reason: 'Intent expired', txHash, telegramId, intentId }
+    }
   }
 
   await pool.query('BEGIN')
