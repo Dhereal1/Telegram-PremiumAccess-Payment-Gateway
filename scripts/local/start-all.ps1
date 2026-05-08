@@ -2,6 +2,7 @@ Param(
   [int]$Port = 3000
 )
 
+$ErrorActionPreference = "Continue"
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\\..")).Path
