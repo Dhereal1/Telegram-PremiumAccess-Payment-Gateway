@@ -1,4 +1,5 @@
 import { Queue, Worker } from 'bullmq'
+import dns from 'dns'
 import IORedis from 'ioredis'
 import crypto from 'crypto'
 import { setCors } from '../../lib/http.js'
@@ -178,7 +179,19 @@ export default async function handler(req, res) {
   const tonApiUrl = process.env.TON_API_URL || 'https://toncenter.com/api/v2'
   if (!receiverAddress) return res.status(500).json({ error: 'Missing TON_RECEIVER_ADDRESS' })
 
-  const connection = new IORedis(redisUrl, { maxRetriesPerRequest: null, enableReadyCheck: false })
+  // Prefer IPv4 to reduce transient DNS failures to hosted Redis on some networks.
+  try {
+    dns.setDefaultResultOrder('ipv4first')
+  } catch {
+    // ignore
+  }
+
+  const connection = new IORedis(redisUrl, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    family: 4,
+    connectTimeout: 15_000,
+  })
   // Prevent unhandled 'error' events from crashing the function runtime.
   connection.on('error', (err) => {
     log.error({ err: String(err?.message || err) }, 'redis_error')

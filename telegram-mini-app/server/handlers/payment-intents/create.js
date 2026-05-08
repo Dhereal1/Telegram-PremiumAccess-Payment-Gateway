@@ -38,7 +38,9 @@ export default async function handler(req, res) {
 
     const intentId = crypto.randomUUID()
     const now = new Date()
-    const expiresAt = new Date(now.getTime() + 10 * 60 * 1000) // 10 minutes
+    // Allow plenty of time for wallet UX + network confirmation.
+    // This is still enforced during verification; expired intents won't be accepted.
+    const expiresAt = new Date(now.getTime() + 60 * 60 * 1000) // 60 minutes
 
     const expectedTon = Number(process.env.TON_PRICE_TON || '0.1')
     const receiverAddress = process.env.TON_RECEIVER_ADDRESS
@@ -68,4 +70,3 @@ export default async function handler(req, res) {
     return res.status(statusCode).json({ error: 'Internal error' })
   }
 }
-

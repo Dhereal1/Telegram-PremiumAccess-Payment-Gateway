@@ -1,4 +1,5 @@
 import crypto from 'crypto'
+import dns from 'dns'
 import IORedis from 'ioredis'
 import { requireRedisUrl } from './env.js'
 import { getLogger } from './log.js'
@@ -6,12 +7,20 @@ import { getLogger } from './log.js'
 let redis
 const log = getLogger()
 
+// Prefer IPv4 to reduce transient DNS failures to hosted Redis on some networks.
+try {
+  dns.setDefaultResultOrder('ipv4first')
+} catch {
+  // ignore
+}
+
 function getRedis() {
   if (redis) return redis
   // Rate limiting must fail fast in serverless; do not hang requests if Redis is unavailable.
   redis = new IORedis(requireRedisUrl(), {
     maxRetriesPerRequest: 1,
     enableReadyCheck: false,
+    family: 4,
     connectTimeout: 2000,
     commandTimeout: 2000,
     retryStrategy: () => null,
