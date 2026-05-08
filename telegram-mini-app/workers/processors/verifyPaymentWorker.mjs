@@ -54,11 +54,12 @@ async function processJob(job) {
   const isExpiredByNow = expiresAtMs != null && expiresAtMs < Date.now()
   const isExpiredByTxTime = expiresAtMs != null && txTimeMs != null && txTimeMs > (expiresAtMs + expiryGraceMs)
 
-  // If intent is already expired, still accept payments that were made BEFORE expiry (tx.utime <= expires_at).
+  // If intent is already expired, still accept payments that were made "close enough" to expiry.
   // This handles "payment confirmed late" scenarios without weakening matching rules.
-  if (pi.status === 'expired' && expiresAtMs != null && txTimeMs != null && txTimeMs <= (expiresAtMs + expiryGraceMs)) {
-    // Treat as pending for this job and continue to mark paid transactionally.
-  } else {
+  const allowLateExpiredIntent =
+    pi.status === 'expired' && expiresAtMs != null && txTimeMs != null && txTimeMs <= (expiresAtMs + expiryGraceMs)
+
+  if (!allowLateExpiredIntent) {
     if (pi.status === 'paid') return { ok: true, status: 'intent_paid', txHash, telegramId, intentId }
     if (pi.status !== 'pending') return { ok: true, status: `intent_${pi.status}`, txHash, telegramId, intentId }
 
@@ -74,8 +75,11 @@ async function processJob(job) {
     const locked = await pool.query(`SELECT status FROM payment_intents WHERE id=$1 FOR UPDATE`, [String(intentId)])
     if (!locked.rows.length) throw new Error('Intent disappeared')
     if (locked.rows[0].status !== 'pending') {
-      await pool.query('ROLLBACK')
-      return { ok: true, status: `intent_${locked.rows[0].status}`, txHash, telegramId, intentId }
+      // Permit late processing if the intent expired but the tx was within the grace window.
+      if (!(locked.rows[0].status === 'expired' && allowLateExpiredIntent)) {
+        await pool.query('ROLLBACK')
+        return { ok: true, status: `intent_${locked.rows[0].status}`, txHash, telegramId, intentId }
+      }
     }
 
     await pool.query(`UPDATE payment_intents SET status='paid', tx_hash=$2, paid_at=NOW() WHERE id=$1`, [String(intentId), String(txHash)])
