@@ -1,11 +1,11 @@
-$ErrorActionPreference = 'Stop'
-
 param(
   [string]$EnvPath,
   [string]$NgrokApi,
   [string]$ProcessWeb,
   [string]$ProcessBot
 )
+
+$ErrorActionPreference = 'Stop'
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 if (-not $EnvPath) { $EnvPath = Join-Path $here "..\\..\\.env" }
