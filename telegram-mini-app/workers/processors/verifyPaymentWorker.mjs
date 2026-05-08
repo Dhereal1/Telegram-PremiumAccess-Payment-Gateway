@@ -173,19 +173,23 @@ async function processJob(job) {
 
     // Multi-tenant: update membership if intent is group-scoped.
     if (pi.group_id) {
+      const gRow = await pool.query(`SELECT duration_days FROM groups WHERE id=$1`, [String(pi.group_id)])
+      const durationDays = Number(gRow.rows[0]?.duration_days || 30)
+      const safeDurationDays = Number.isFinite(durationDays) && durationDays > 0 ? Math.floor(durationDays) : 30
+
       const membershipId = uuid()
       const membership = await pool.query(
         `INSERT INTO memberships (id, group_id, telegram_id, subscription_status, last_payment_at, current_period_end, payment_status, expiry_date, updated_at)
-         VALUES ($1,$2,$3,'active',NOW(), NOW() + INTERVAL '30 days', TRUE, NOW() + INTERVAL '30 days', NOW())
+         VALUES ($1,$2,$3,'active',NOW(), NOW() + make_interval(days => $4), TRUE, NOW() + make_interval(days => $4), NOW())
          ON CONFLICT (group_id, telegram_id) DO UPDATE SET
            subscription_status='active',
            last_payment_at=NOW(),
-           current_period_end = GREATEST(COALESCE(memberships.current_period_end, NOW()), NOW()) + INTERVAL '30 days',
+           current_period_end = GREATEST(COALESCE(memberships.current_period_end, NOW()), NOW()) + make_interval(days => $4),
            payment_status=TRUE,
-           expiry_date = GREATEST(COALESCE(memberships.expiry_date, NOW()), NOW()) + INTERVAL '30 days',
+           expiry_date = GREATEST(COALESCE(memberships.expiry_date, NOW()), NOW()) + make_interval(days => $4),
            updated_at=NOW()
          RETURNING id, access_granted`,
-        [membershipId, String(pi.group_id), String(telegramId)],
+        [membershipId, String(pi.group_id), String(telegramId), safeDurationDays],
       )
       enqueueAccessMembershipId = membership.rows[0].id
       enqueueAccessGroupId = String(pi.group_id)

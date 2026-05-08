@@ -3,8 +3,9 @@ import fetch from 'node-fetch'
 import { Telegraf } from 'telegraf'
 import { getLogger } from './lib/log.js'
 import { getPool } from './lib/db.js'
-import { getAdminByTelegramId, createGroupIfNotExists } from './lib/groups.js'
+import { getAdminByTelegramId, createGroupIfNotExists, upsertAdminWallet } from './lib/groups.js'
 import { deleteOnboardingSession, getOnboardingSession, upsertOnboardingSession } from './lib/onboarding-sessions.js'
+import { normalizeTonAddress } from './lib/toncenter.js'
 
 const log = getLogger()
 
@@ -256,11 +257,7 @@ export function createBot({ botToken, webAppUrl }) {
       const admin = await getAdminByTelegramId(adminId)
       if (!admin) {
         await upsertOnboardingSession({ adminId, telegramChatId, step: 'awaiting_wallet', collectedData: data })
-        await ctx.reply('Before creating a premium group, set your payout wallet in the Mini App admin dashboard.', {
-          reply_markup: {
-            inline_keyboard: [[{ text: '🧩 Open Admin Dashboard', web_app: { url: `${normalizedWebAppUrl}/?admin=1` } }]],
-          },
-        })
+        await ctx.reply('💳 Enter your TON payout wallet address (this will be used for all your groups):')
         return
       }
 
@@ -281,8 +278,29 @@ export function createBot({ botToken, webAppUrl }) {
     }
 
     if (step === 'awaiting_wallet') {
-      // Keep it simple: once wallet is set, the admin can press Setup again.
-      await ctx.reply('Set your wallet in the admin dashboard, then press /start and tap Setup Group again.')
+      const walletRaw = String(text).trim()
+      const normalized = normalizeTonAddress(walletRaw)
+      if (!normalized) {
+        await ctx.reply('That does not look like a valid TON address. Please paste a valid wallet address (starts with EQ…/UQ…).')
+        return
+      }
+
+      await upsertAdminWallet({ adminTelegramId: adminId, walletAddress: normalized })
+
+      // Create group now that wallet exists
+      const groupId = crypto.randomUUID()
+      const group = await createGroupIfNotExists({
+        id: groupId,
+        telegramChatId: telegramChatId,
+        adminTelegramId: adminId,
+        name: String(data.name || 'Premium Group').slice(0, 120),
+        priceTon: Number(data.price_ton || 0.1),
+        durationDays: Number(data.duration_days || 30),
+      })
+
+      await deleteOnboardingSession({ adminId, telegramChatId })
+      const link = makeGroupLink(normalizedWebAppUrl, group.id)
+      await ctx.reply(`✅ Your premium group is ready!\n\n🔗 Your subscription link:\n${link}\n\nShare this with your audience to start earning.`)
       return
     }
   })

@@ -29,12 +29,15 @@ function TonSection({ user, tg }) {
   const fetchUserStatus = useCallback(async () => {
     if (!user?.id) return null
     const qs = groupId ? `?groupId=${encodeURIComponent(String(groupId))}` : ''
-    const resp = await fetch(`/api/user/status/${encodeURIComponent(String(user.id))}${qs}`, { method: 'GET' })
+    const resp = await fetch(`/api/user/status/${encodeURIComponent(String(user.id))}${qs}`, {
+      method: 'GET',
+      headers: tg?.initData ? { 'x-telegram-init-data': tg.initData } : undefined,
+    })
     const data = await resp.json().catch(() => null)
     if (!resp.ok) throw new Error(data?.error || `Status failed (${resp.status})`)
     setRemoteStatus(data)
     return data
-  }, [groupId, user])
+  }, [groupId, tg, user])
 
   useEffect(() => {
     if (!user?.id) return
