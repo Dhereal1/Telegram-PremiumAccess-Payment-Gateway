@@ -8,7 +8,8 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-if (-not $EnvPath) { $EnvPath = Join-Path $here "..\\..\\.env" }
+$projectRoot = Resolve-Path (Join-Path $here "..\\..") | Select-Object -ExpandProperty Path
+if (-not $EnvPath) { $EnvPath = Join-Path $projectRoot ".env" }
 if (-not $NgrokApi) { $NgrokApi = "http://127.0.0.1:4040/api/tunnels" }
 if (-not $ProcessWeb) { $ProcessWeb = "local-web" }
 if (-not $ProcessBot) { $ProcessBot = "local-bot" }
@@ -58,7 +59,11 @@ Set-DotEnvKeyValue -path $EnvPath -key "WEB_APP_URL" -value $publicUrl
 Write-Host "Updated WEB_APP_URL in $EnvPath"
 
 Write-Host "Restarting PM2 processes: $ProcessWeb, $ProcessBot"
-& npx --no-install pm2 restart $ProcessWeb --update-env | Out-Null
-& npx --no-install pm2 restart $ProcessBot --update-env | Out-Null
+$pm2 = Join-Path $projectRoot "node_modules\\.bin\\pm2.cmd"
+if (-not (Test-Path $pm2)) {
+  throw "pm2 not found at $pm2. Run: npm install"
+}
+& $pm2 restart $ProcessWeb --update-env | Out-Null
+& $pm2 restart $ProcessBot --update-env | Out-Null
 
 Write-Host "Done."
