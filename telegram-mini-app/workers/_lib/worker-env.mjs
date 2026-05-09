@@ -12,18 +12,16 @@ const WorkerEnvSchema = z.object({
 
   BOT_TOKEN: z.string().min(1),
   BOT_USERNAME: z.string().optional(),
-  CHANNEL_ID: z.string().optional(),
 
   // Multi-tenant: receiver/price can be resolved from DB per group/admin.
   // Keep optional for SaaS mode; legacy single-tenant can still provide them.
-  TON_RECEIVER_ADDRESS: z.string().min(1).optional(),
-  TON_PRICE_TON: z.string().default('0.1').optional(),
   TON_API_URL: z.string().default('https://toncenter.com/api/v2'),
   TON_API_KEY: z.string().optional(),
 
   TELEGRAM_AUTH_MAX_AGE_SECONDS: z.string().optional(),
 
   PLATFORM_FEE_PERCENT: z.string().default('10').optional(),
+  PLATFORM_WALLET_ADDRESS: z.string().optional(),
 
   // Optional AI (Groq)
   GROQ_API_KEY: z.string().optional(),

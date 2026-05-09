@@ -15,8 +15,9 @@ function TonSection({ user, tg }) {
   const [remoteStatus, setRemoteStatus] = useState(null)
   const [remoteStatusError, setRemoteStatusError] = useState(null)
 
-  const receiverAddress = import.meta.env.VITE_TON_RECEIVER_ADDRESS || 'UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJKZ'
-  const tonPriceTon = Number(import.meta.env.VITE_TON_PRICE_TON || '0.1')
+  // Multi-tenant only: receiver and price come from the backend intent.
+  const receiverAddress = 'UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJKZ'
+  const tonPriceTon = 0.1
   const groupId =
     new URLSearchParams(window.location.search).get('g') ||
     new URLSearchParams(window.location.search).get('groupId') ||
@@ -73,7 +74,7 @@ function TonSection({ user, tg }) {
         setRemoteStatusError(null)
         const data = await fetchUserStatus()
         const paid = Boolean(data?.paid)
-        const accessGranted = Boolean(data?.user?.access_granted)
+        const accessGranted = Boolean(groupId ? data?.membership?.access_granted : data?.user?.access_granted)
         if (paid || accessGranted) {
           clearInterval(interval)
           if (!cancelled) setPayStatus('confirmed')
@@ -136,6 +137,11 @@ function TonSection({ user, tg }) {
       setPayError('Open this Mini App from Telegram (via the bot).')
       return
     }
+    if (!groupId) {
+      setPayStatus('error')
+      setPayError('Missing group id. Open this Mini App via a group-specific link.')
+      return
+    }
     if (!walletAddress) {
       setPayStatus('error')
       setPayError('Connect wallet first')
@@ -165,15 +171,36 @@ function TonSection({ user, tg }) {
       const payloadCell = beginCell().storeUint(0, 32).storeStringTail(comment).endCell()
       const payloadBase64 = payloadCell.toBoc().toString('base64')
 
+      const platformWalletAddress = intentData?.platformWalletAddress || null
+      const platformFeeTon = intentData?.platformFeeTon != null ? String(intentData.platformFeeTon) : null
+      const adminAmountTon = intentData?.adminAmountTon != null ? String(intentData.adminAmountTon) : null
+      const feePct = Number(intentData?.platformFeePercent || 0)
+
+      const messages =
+        groupId && platformWalletAddress && feePct > 0 && platformFeeTon && adminAmountTon
+          ? [
+              {
+                address: platformWalletAddress,
+                amount: toNano(platformFeeTon).toString(),
+                payload: payloadBase64,
+              },
+              {
+                address: intentData.receiverAddress || receiverAddress,
+                amount: toNano(adminAmountTon).toString(),
+                payload: payloadBase64,
+              },
+            ]
+          : [
+              {
+                address: intentData.receiverAddress || receiverAddress,
+                amount: toNano(Number(intentData.expectedAmountTon || tonPriceTon)).toString(),
+                payload: payloadBase64,
+              },
+            ]
+
       const transaction = {
         validUntil: Math.floor(Date.now() / 1000) + 600,
-        messages: [
-          {
-            address: intentData.receiverAddress || receiverAddress,
-            amount: toNano(Number(intentData.expectedAmountTon || tonPriceTon)).toString(),
-            payload: payloadBase64,
-          },
-        ],
+        messages,
         ...(wallet?.account?.address ? { from: wallet.account.address } : {}),
       }
 

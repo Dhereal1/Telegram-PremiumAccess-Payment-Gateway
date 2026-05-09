@@ -3,6 +3,12 @@ import { setCors, readJson } from '../../lib/http.js'
 import { verifyTelegramData, parseTelegramUser } from '../../lib/telegram.js'
 import { parseJson, TelegramInitDataSchema } from '../../lib/validation.js'
 import { getQueues } from '../../lib/queue.js'
+import { z } from 'zod'
+
+const BodySchema = TelegramInitDataSchema.extend({
+  groupId: z.string().uuid().optional(),
+  group_id: z.string().uuid().optional(),
+})
 
 export default async function handler(req, res) {
   setCors(res)
@@ -16,25 +22,35 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid JSON body' })
   }
 
-  const { initData } = parseJson(body, TelegramInitDataSchema)
+  const parsed = parseJson(body, BodySchema)
+  const initData = parsed.initData
+  const groupId = parsed.groupId || parsed.group_id || null
   const verify = verifyTelegramData(initData, process.env.BOT_TOKEN, { maxAgeSeconds: 300 })
   if (!verify.ok) return res.status(401).json({ error: 'Invalid Telegram data', reason: verify.reason })
 
   const tgUser = parseTelegramUser(initData)
   if (!tgUser?.id) return res.status(400).json({ error: 'Missing Telegram user in initData' })
 
-  const pool = getPool()
-  const u = await pool.query('SELECT id, telegram_id, payment_status FROM users WHERE telegram_id=$1', [String(tgUser.id)])
-  if (!u.rows.length) return res.status(404).json({ error: 'User not found' })
-  if (!u.rows[0].payment_status) return res.status(403).json({ error: 'Not paid' })
+  if (!groupId) return res.status(400).json({ error: 'Missing groupId' })
 
-  const userId = u.rows[0].id
+  const pool = getPool()
   const { accessGrantQueue } = getQueues()
+
+  const m = await pool.query(
+    `SELECT id, telegram_id, payment_status
+     FROM memberships
+     WHERE group_id=$1 AND telegram_id=$2`,
+    [String(groupId), String(tgUser.id)],
+  )
+  const membership = m.rows[0]
+  if (!membership) return res.status(404).json({ error: 'Membership not found' })
+  if (!membership.payment_status) return res.status(403).json({ error: 'Not paid' })
+
   await accessGrantQueue.add(
     'regenerate-invite',
-    { userId, telegramId: String(tgUser.id), forceRegenerate: true },
-    { jobId: `regen_${userId}_${Date.now()}` },
+    { membershipId: String(membership.id), groupId: String(groupId), telegramId: String(tgUser.id), forceRegenerate: true },
+    { jobId: `regenm_${String(membership.id)}_${Date.now()}` },
   )
 
-  return res.json({ ok: true, enqueued: true })
+  return res.json({ ok: true, enqueued: true, mode: 'membership', membershipId: String(membership.id), groupId: String(groupId) })
 }

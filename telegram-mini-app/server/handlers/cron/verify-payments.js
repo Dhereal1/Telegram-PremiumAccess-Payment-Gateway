@@ -17,10 +17,8 @@ export default async function handler(req, res) {
   const auth = requireCronAuth(req)
   if (!auth.ok) return res.status(401).json({ error: 'Unauthorized' })
 
-  // This legacy endpoint processes TON + DB work directly. Prefer `/api/internal/run-workers`.
-  if (process.env.ENABLE_LEGACY_CRON !== '1') {
-    return res.status(410).json({ error: 'Deprecated. Use /api/internal/run-workers instead.' })
-  }
+  // Multi-tenant-only mode: legacy verifier is disabled.
+  return res.status(410).json({ error: 'Disabled. Use long-running workers (ton-listener + BullMQ workers).' })
 
   // Safety: refuse to run if multi-tenant wallets exist (prevents silent missed payments).
   try {

@@ -119,7 +119,7 @@ export default async function handler(req, res) {
       case 'OPTIONS /tonconnect/manifest':
         return tonconnectManifest(req, res)
 
-      // Legacy cron endpoints (kept for compatibility; typically return 410 unless ENABLE_LEGACY_CRON=1)
+      // Legacy cron endpoints (multi-tenant-only mode: always 410)
       case 'GET /cron/verify-payments':
       case 'POST /cron/verify-payments':
         return cronVerifyPayments(req, res)

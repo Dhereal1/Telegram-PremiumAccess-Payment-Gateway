@@ -5,7 +5,7 @@ import { toNano } from '@ton/core'
 import { getDb } from '../_lib/db.mjs'
 import { getWorkerEnv } from '../_lib/worker-env.mjs'
 import { getWorkerLogger } from '../_lib/logger.mjs'
-import { extractGroupIdFromComment, extractPaymentIntentIdFromComment, extractTelegramIdFromComment, isValidIncomingPayment, parseCommentFromTx } from '../../server/lib/toncenter.js'
+import { extractGroupIdFromComment, extractPaymentIntentIdFromComment, extractTelegramIdFromComment, getTransactions, isValidIncomingPayment, parseCommentFromTx } from '../../server/lib/toncenter.js'
 import { logFailedJob } from '../_lib/failedJobs.mjs'
 import { logFraud } from '../_lib/fraudLogs.mjs'
 import { logEvent } from '../../services/subscriptionEvents.service.mjs'
@@ -37,11 +37,10 @@ function nanoToTonString(nano) {
   return fracStr ? `${sign}${whole.toString()}.${fracStr}` : `${sign}${whole.toString()}`
 }
 
-function isExactAmount(tx, expectedTon) {
+function isExactAmountNano(tx, expectedNano) {
   try {
     const value = toBigIntSafe(tx?.in_msg?.value || '0')
-    const expected = BigInt(toNano(Number(expectedTon)).toString())
-    return value === expected
+    return value === expectedNano
   } catch {
     return false
   }
@@ -79,32 +78,84 @@ async function processJob(job) {
   }
 
   const pi = intent.rows[0]
+  if (!pi.group_id) {
+    await logFraud({ pool, telegramId, paymentIntentId: intentId, txHash, reason: 'legacy_intent_no_group', metadata: {} })
+    return { ok: false, reason: 'Intent is not group-scoped', txHash, telegramId, intentId }
+  }
   if (String(pi.telegram_id) !== String(telegramId)) {
     await logFraud({ pool, telegramId, groupId: pi.group_id, paymentIntentId: intentId, txHash, reason: 'intent_telegram_mismatch', metadata: { comment } })
     return { ok: false, reason: 'Intent telegram mismatch', txHash }
   }
 
-  // Strict group mapping: if intent is group-scoped, comment must include matching group id.
-  if (pi.group_id) {
-    if (!groupIdFromComment) {
-      await logFraud({ pool, telegramId, groupId: pi.group_id, paymentIntentId: intentId, txHash, reason: 'missing_group_in_comment', metadata: { comment } })
-      return { ok: false, reason: 'Missing group id in comment', txHash }
-    }
-    if (String(pi.group_id) !== String(groupIdFromComment)) {
-      await logFraud({ pool, telegramId, groupId: pi.group_id, paymentIntentId: intentId, txHash, reason: 'intent_group_mismatch', metadata: { comment } })
-      return { ok: false, reason: 'Intent group mismatch', txHash }
-    }
+  // Strict group mapping: comment must include matching group id.
+  if (!groupIdFromComment) {
+    await logFraud({ pool, telegramId, groupId: pi.group_id, paymentIntentId: intentId, txHash, reason: 'missing_group_in_comment', metadata: { comment } })
+    return { ok: false, reason: 'Missing group id in comment', txHash }
+  }
+  if (String(pi.group_id) !== String(groupIdFromComment)) {
+    await logFraud({ pool, telegramId, groupId: pi.group_id, paymentIntentId: intentId, txHash, reason: 'intent_group_mismatch', metadata: { comment } })
+    return { ok: false, reason: 'Intent group mismatch', txHash }
   }
 
   // Validate recipient + minimum amount using intent fields (multi-tenant safe).
-  const receiverToCheck = pi.receiver_address || env.TON_RECEIVER_ADDRESS
-  const expectedTon = Number(pi.expected_amount_ton || env.TON_PRICE_TON || '0')
+  const receiverToCheck = pi.receiver_address
+  const expectedTonStr = String(pi.expected_amount_ton || '0')
+  const expectedTotalNano = BigInt(toNano(expectedTonStr).toString())
   if (!receiverToCheck) return { ok: false, reason: 'Missing receiver address', txHash, telegramId, intentId }
-  const valid = isValidIncomingPayment(tx, { receiverAddress: receiverToCheck, minTon: expectedTon })
+
+  const feePct = Number(process.env.PLATFORM_FEE_PERCENT || env.PLATFORM_FEE_PERCENT || '10')
+  const feePctInt = Number.isFinite(feePct) && feePct >= 0 ? Math.floor(feePct) : 10
+  const platformWallet = String(env.PLATFORM_WALLET_ADDRESS || '').trim() || null
+  const splitEnabled = Boolean(pi.group_id && platformWallet && feePctInt > 0)
+
+  const platformFeeNano = splitEnabled ? (expectedTotalNano * BigInt(feePctInt)) / 100n : 0n
+  const adminExpectedNano = splitEnabled ? expectedTotalNano - platformFeeNano : expectedTotalNano
+
+  const valid = isValidIncomingPayment(tx, { receiverAddress: receiverToCheck, minTon: nanoToTonString(adminExpectedNano) })
   if (!valid.ok) return { ok: false, reason: valid.reason, txHash, telegramId, intentId }
-  if (!isExactAmount(tx, expectedTon)) {
-    await logFraud({ pool, telegramId, groupId: pi.group_id, paymentIntentId: intentId, txHash, reason: 'amount_mismatch', metadata: { expectedTon } })
+  if (!isExactAmountNano(tx, adminExpectedNano)) {
+    await logFraud({
+      pool,
+      telegramId,
+      groupId: pi.group_id,
+      paymentIntentId: intentId,
+      txHash,
+      reason: 'amount_mismatch',
+      metadata: { expectedAdminTon: nanoToTonString(adminExpectedNano), expectedTotalTon: nanoToTonString(expectedTotalNano) },
+    })
     return { ok: false, reason: 'Amount mismatch', txHash, telegramId, intentId }
+  }
+
+  // Enforce platform fee (best-effort but blocking): require a matching payment into platform wallet.
+  if (splitEnabled) {
+    const lookback = Number(process.env.PLATFORM_FEE_LOOKBACK_LIMIT || '50')
+    const txs = await getTransactions({
+      apiUrl: env.TON_API_URL,
+      apiKey: env.TON_API_KEY,
+      address: platformWallet,
+      limit: Number.isFinite(lookback) && lookback > 0 ? Math.floor(lookback) : 50,
+    })
+
+    const found = Array.isArray(txs)
+      ? txs.find((t) => {
+          const c = parseCommentFromTx(t) || ''
+          if (!c) return false
+          const tgid = extractTelegramIdFromComment(c)
+          const piid = extractPaymentIntentIdFromComment(c)
+          const gid = extractGroupIdFromComment(c)
+          if (String(tgid || '') !== String(telegramId)) return false
+          if (String(piid || '') !== String(intentId)) return false
+          if (pi.group_id && String(gid || '') !== String(pi.group_id)) return false
+          const ok = isValidIncomingPayment(t, { receiverAddress: platformWallet, minTon: nanoToTonString(platformFeeNano) })
+          if (!ok.ok) return false
+          return isExactAmountNano(t, platformFeeNano)
+        })
+      : null
+
+    if (!found) {
+      // Throw to trigger BullMQ retry (wallets sometimes deliver messages with slight delay).
+      throw new Error('Platform fee payment not found yet')
+    }
   }
 
   // Strict matching: only pending intents can be paid.
@@ -141,12 +192,9 @@ async function processJob(job) {
       const g = await pool.query(`SELECT admin_telegram_id FROM groups WHERE id=$1`, [String(pi.group_id)])
       const adminId = g.rows[0]?.admin_telegram_id ? String(g.rows[0].admin_telegram_id) : null
       if (adminId) {
-        const amountNano = toBigIntSafe(tx?.in_msg?.value || '0')
-        const feePct = Number(process.env.PLATFORM_FEE_PERCENT || env.PLATFORM_FEE_PERCENT || '10')
-        const feePctInt = Number.isFinite(feePct) && feePct >= 0 ? Math.floor(feePct) : 10
-
-        const platformFeeNano = (amountNano * BigInt(feePctInt)) / 100n
-        const adminAmountNano = amountNano - platformFeeNano
+        const amountNano = expectedTotalNano
+        const platformFeeNano0 = splitEnabled ? platformFeeNano : (amountNano * BigInt(feePctInt)) / 100n
+        const adminAmountNano = splitEnabled ? adminExpectedNano : amountNano - platformFeeNano0
 
         await pool.query(
           `INSERT INTO earnings (id, admin_id, group_id, payment_id, total_amount, platform_fee, admin_amount, status, created_at)
@@ -158,7 +206,7 @@ async function processJob(job) {
             String(pi.group_id),
             String(txHash),
             nanoToTonString(amountNano),
-            nanoToTonString(platformFeeNano),
+            nanoToTonString(platformFeeNano0),
             nanoToTonString(adminAmountNano),
           ],
         )
@@ -171,47 +219,28 @@ async function processJob(job) {
     let enqueueAccessGroupId = null
     let alreadyGranted = false
 
-    // Multi-tenant: update membership if intent is group-scoped.
-    if (pi.group_id) {
-      const gRow = await pool.query(`SELECT duration_days FROM groups WHERE id=$1`, [String(pi.group_id)])
-      const durationDays = Number(gRow.rows[0]?.duration_days || 30)
-      const safeDurationDays = Number.isFinite(durationDays) && durationDays > 0 ? Math.floor(durationDays) : 30
+    // Multi-tenant: update membership (multi-tenant only mode).
+    const gRow = await pool.query(`SELECT duration_days FROM groups WHERE id=$1`, [String(pi.group_id)])
+    const durationDays = Number(gRow.rows[0]?.duration_days || 30)
+    const safeDurationDays = Number.isFinite(durationDays) && durationDays > 0 ? Math.floor(durationDays) : 30
 
-      const membershipId = uuid()
-      const membership = await pool.query(
-        `INSERT INTO memberships (id, group_id, telegram_id, subscription_status, last_payment_at, current_period_end, payment_status, expiry_date, updated_at)
-         VALUES ($1,$2,$3,'active',NOW(), NOW() + make_interval(days => $4), TRUE, NOW() + make_interval(days => $4), NOW())
-         ON CONFLICT (group_id, telegram_id) DO UPDATE SET
-           subscription_status='active',
-           last_payment_at=NOW(),
-           current_period_end = GREATEST(COALESCE(memberships.current_period_end, NOW()), NOW()) + make_interval(days => $4),
-           payment_status=TRUE,
-           expiry_date = GREATEST(COALESCE(memberships.expiry_date, NOW()), NOW()) + make_interval(days => $4),
-           updated_at=NOW()
-         RETURNING id, access_granted`,
-        [membershipId, String(pi.group_id), String(telegramId), safeDurationDays],
-      )
-      enqueueAccessMembershipId = membership.rows[0].id
-      enqueueAccessGroupId = String(pi.group_id)
-      alreadyGranted = membership.rows[0].access_granted === true
-    } else {
-      // Legacy single-tenant: update users table.
-      const user = await pool.query(
-        `UPDATE users
-         SET subscription_status='active',
-             last_payment_at=NOW(),
-             current_period_end = GREATEST(COALESCE(current_period_end, NOW()), NOW()) + INTERVAL '30 days',
-             payment_status=true,
-             expiry_date = GREATEST(COALESCE(expiry_date, NOW()), NOW()) + INTERVAL '30 days'
-         WHERE telegram_id=$1
-         RETURNING id, telegram_id, access_granted`,
-        [String(telegramId)],
-      )
-      if (!user.rows.length) throw new Error('User not found for telegram_id')
-      enqueueAccessUserId = user.rows[0].id
-      enqueueAccessTelegramId = user.rows[0].telegram_id
-      alreadyGranted = user.rows[0].access_granted === true
-    }
+    const membershipId = uuid()
+    const membership = await pool.query(
+      `INSERT INTO memberships (id, group_id, telegram_id, subscription_status, last_payment_at, current_period_end, payment_status, expiry_date, updated_at)
+       VALUES ($1,$2,$3,'active',NOW(), NOW() + make_interval(days => $4), TRUE, NOW() + make_interval(days => $4), NOW())
+       ON CONFLICT (group_id, telegram_id) DO UPDATE SET
+         subscription_status='active',
+         last_payment_at=NOW(),
+         current_period_end = GREATEST(COALESCE(memberships.current_period_end, NOW()), NOW()) + make_interval(days => $4),
+         payment_status=TRUE,
+         expiry_date = GREATEST(COALESCE(memberships.expiry_date, NOW()), NOW()) + make_interval(days => $4),
+         updated_at=NOW()
+       RETURNING id, access_granted`,
+      [membershipId, String(pi.group_id), String(telegramId), safeDurationDays],
+    )
+    enqueueAccessMembershipId = membership.rows[0].id
+    enqueueAccessGroupId = String(pi.group_id)
+    alreadyGranted = membership.rows[0].access_granted === true
 
     await pool.query(
       `INSERT INTO subscription_events (id, telegram_id, type, metadata, created_at)

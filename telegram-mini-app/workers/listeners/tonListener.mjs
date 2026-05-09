@@ -13,7 +13,6 @@ log.info(
   {
     tonApiUrl: env.TON_API_URL,
     hasTonApiKey: Boolean(env.TON_API_KEY && env.TON_API_KEY.length > 0),
-    hasLegacyReceiver: Boolean(env.TON_RECEIVER_ADDRESS),
   },
   'tonListener env',
 );
@@ -27,9 +26,7 @@ async function getWalletsToPoll() {
      WHERE g.is_active = TRUE`,
   )
   const list = wallets.rows.map((r) => r.wallet_address).filter(Boolean)
-  if (list.length) return list
-  // Legacy single-tenant fallback
-  return env.TON_RECEIVER_ADDRESS ? [env.TON_RECEIVER_ADDRESS] : []
+  return list
 }
 
 async function getCursorForWallet(walletAddress) {
@@ -115,6 +112,9 @@ async function main() {
   while (true) {
     try {
       const wallets = await getWalletsToPoll()
+      if (!wallets.length) {
+        log.warn('No admin wallets found to poll (multi-tenant only mode)')
+      }
       for (const wallet of wallets) {
         const res = await pollOnceForWallet(wallet);
         if (res.enqueued) log.info({ wallet, ...res }, 'tonListener enqueued jobs');

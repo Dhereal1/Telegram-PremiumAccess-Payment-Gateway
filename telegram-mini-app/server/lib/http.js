@@ -1,5 +1,8 @@
 export function setCors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*')
+  const origin = String(process.env.WEB_APP_URL || '').trim().replace(/\/+$/, '')
+  // In multi-tenant production, only allow the deployed Mini App origin.
+  // Fallback to '*' only when WEB_APP_URL is not configured (local/dev).
+  res.setHeader('Access-Control-Allow-Origin', origin || '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,x-telegram-init-data')
 }
@@ -14,13 +17,7 @@ export async function readJson(req) {
 }
 
 export function requireCronAuth(req) {
-  // Allow Vercel Cron invocations without additional secrets.
-  // Vercel sets `x-vercel-cron: 1` on cron-triggered requests.
-  const cronHeader = req.headers['x-vercel-cron']
-  const isVercelCron = Array.isArray(cronHeader) ? cronHeader[0] === '1' : cronHeader === '1'
-  if (isVercelCron) return { ok: true, mode: 'vercel-cron' }
-
-  // Optional shared secret for manual triggering.
+  // Require shared secret. Do not trust `x-vercel-cron` alone (spoofable by any client).
   const secret = process.env.CRON_SECRET
   if (!secret) return { ok: false }
 

@@ -171,11 +171,8 @@ export default async function handler(req, res) {
   const auth = isAuthorizedCron(req)
   if (auth !== true) return res.status(auth.status).json({ error: auth.error })
 
-  // IMPORTANT: This endpoint is a serverless "burst runner" intended only for the legacy single-tenant setup.
-  // In multi-tenant mode, wallet polling must happen in the long-running `ton-listener` on an always-on machine.
-  if (process.env.ENABLE_SERVERLESS_WORKERS !== '1') {
-    return res.status(410).json({ error: 'Deprecated. Use long-running workers (ton-listener + BullMQ workers).' })
-  }
+  // Multi-tenant-only mode: this serverless "burst runner" is disabled.
+  return res.status(410).json({ error: 'Disabled. Use long-running workers (ton-listener + BullMQ workers).' })
 
   const redisUrl = process.env.REDIS_URL
   if (!redisUrl) return res.status(500).json({ error: 'Missing REDIS_URL' })

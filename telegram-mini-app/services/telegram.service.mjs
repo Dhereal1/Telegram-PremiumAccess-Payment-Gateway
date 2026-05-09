@@ -1,12 +1,10 @@
 import fetch from 'node-fetch'
 
 const BOT_TOKEN = process.env.BOT_TOKEN
-const CHANNEL_ID = process.env.CHANNEL_ID
 
 export async function createInviteLink({ chatId, memberLimit = 1, expireSeconds = 3600 } = {}) {
   if (!BOT_TOKEN) throw new Error('Missing BOT_TOKEN')
-  const targetChatId = chatId ?? CHANNEL_ID
-  if (!targetChatId) throw new Error('Missing chatId (or CHANNEL_ID)')
+  if (!chatId) throw new Error('Missing chatId')
 
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/createChatInviteLink`
   const now = Math.floor(Date.now() / 1000)
@@ -15,7 +13,7 @@ export async function createInviteLink({ chatId, memberLimit = 1, expireSeconds 
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      chat_id: targetChatId,
+      chat_id: chatId,
       member_limit: memberLimit,
       expire_date: now + expireSeconds
     })

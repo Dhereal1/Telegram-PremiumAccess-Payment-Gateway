@@ -37,10 +37,8 @@ export default async function handler(req, res) {
     hasDatabaseUrl: Boolean(process.env.DATABASE_URL),
     hasRedisUrl: Boolean(process.env.REDIS_URL),
     hasBotToken: Boolean(process.env.BOT_TOKEN),
-    hasChannelId: Boolean(process.env.CHANNEL_ID),
     hasTonApiUrl: Boolean(process.env.TON_API_URL),
     hasTonApiKey: Boolean(process.env.TON_API_KEY),
-    hasTonReceiver: Boolean(process.env.TON_RECEIVER_ADDRESS),
   }
 
   const pool = getPool()
@@ -73,4 +71,3 @@ export default async function handler(req, res) {
     queues: queueStats.ok ? { ok: true, counts: queueStats.value } : { ok: false, error: queueStats.error },
   })
 }
-

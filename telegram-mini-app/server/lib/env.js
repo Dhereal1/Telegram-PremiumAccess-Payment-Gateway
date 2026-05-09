@@ -6,12 +6,9 @@ const EnvSchema = z.object({
 
   // Telegram / access control
   WEB_APP_URL: z.string().url().optional(),
-  CHANNEL_ID: z.string().optional(),
   TELEGRAM_AUTH_MAX_AGE_SECONDS: z.string().optional(),
 
   // TON
-  TON_RECEIVER_ADDRESS: z.string().optional(),
-  TON_PRICE_TON: z.string().optional(),
   TON_API_URL: z.string().optional(),
   TON_API_KEY: z.string().optional(),
 
@@ -23,6 +20,7 @@ const EnvSchema = z.object({
 
   // Platform fee
   PLATFORM_FEE_PERCENT: z.string().optional(),
+  PLATFORM_WALLET_ADDRESS: z.string().optional(),
 
   // Optional AI (Groq)
   GROQ_API_KEY: z.string().optional(),

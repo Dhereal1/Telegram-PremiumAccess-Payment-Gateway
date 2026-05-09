@@ -146,6 +146,17 @@ Vercel env vars required:
 - (optional) `TON_API_KEY` (recommended)
 - (optional) `TON_TX_PAGE_LIMIT` (default `50`)
 - (optional) `TON_TX_MAX_PAGES` (default `8`)
+- (optional) `SUBMIT_TX_LOOKBACK_LIMIT` (default `50`) — when calling `/api/payments/submit-tx`, how many recent txs to scan on-chain for the provided `txHash`
+
+## Platform fee (important)
+
+This repo tracks a platform fee in the DB (`earnings.platform_fee`) and exposes admin earnings via `/api/admin/earnings`.
+
+However, in the current payment design **funds are sent directly to the admin’s wallet** (receiver = `admins.wallet_address`), so the platform fee is **not enforced on-chain** — it’s accounting only.
+
+If you need a guaranteed 10% fee, you must change the money flow. Minimal options:
+- **Split payment at checkout**: TonConnect supports multiple `messages`; send one message to the platform wallet (fee) and one to the admin wallet (remainder).
+- **Platform wallet receiver**: accept payments to a platform wallet, then pay admins out separately (manual/automated), keeping the fee by default.
 
 ## Queue + Workers (production path)
 

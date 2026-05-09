@@ -14,52 +14,6 @@ import { chatComplete } from '../../server/lib/groq.js'
 const logger = getWorkerLogger()
 const pool = getDb()
 
-async function expireBatch(limit) {
-  const res = await queryWithRetry(
-    pool,
-    `SELECT id, telegram_id
-     FROM users
-     WHERE payment_status = true
-       AND expiry_date IS NOT NULL
-       AND expiry_date < NOW()
-     ORDER BY expiry_date ASC
-     LIMIT $1`,
-    [limit],
-  )
-
-  let expired = 0
-  for (const row of res.rows) {
-    const upd = await queryWithRetry(
-      pool,
-      `UPDATE users
-       SET payment_status=false, access_granted=false, subscription_status='expired'
-       WHERE id=$1
-         AND payment_status=true
-         AND expiry_date IS NOT NULL
-         AND expiry_date < NOW()
-       RETURNING telegram_id`,
-      [row.id],
-    )
-
-    // Idempotency: only emit events if we actually transitioned state.
-    if (!upd.rows.length) continue
-    expired++
-
-    await logEvent({ userId: String(row.telegram_id), type: 'subscription_expired', metadata: {} }).catch(() => {})
-    await logEvent({ userId: String(row.telegram_id), type: 'access_revoked', metadata: {} }).catch(() => {})
-
-    // Best-effort: remove from legacy channel if configured.
-    try {
-      const channelId = process.env.CHANNEL_ID
-      if (channelId) await kickChatMember({ chatId: channelId, userId: row.telegram_id })
-    } catch (e) {
-      logger.warn({ telegramId: String(row.telegram_id), err: String(e?.message || e) }, 'expiry_kick_failed_legacy')
-    }
-  }
-
-  return expired
-}
-
 async function expireMembershipBatch(limit) {
   const res = await queryWithRetry(
     pool,
@@ -204,10 +158,9 @@ export async function processExpiryJob(job) {
   const { limit } = parseJob(ExpiryJobSchema, job.data || {})
   const batchLimit = Number(limit || 100)
   const warnedMemberships = await warnExpiringMembershipBatch(batchLimit)
-  const expired = await expireBatch(batchLimit)
   const expiredMemberships = await expireMembershipBatch(batchLimit)
-  logger.info({ jobId: job.id, queue: 'expiry', warnedMemberships, expired, expiredMemberships }, 'expiry_done')
-  return { warnedMemberships, expired, expiredMemberships }
+  logger.info({ jobId: job.id, queue: 'expiry', warnedMemberships, expiredMemberships }, 'expiry_done')
+  return { warnedMemberships, expiredMemberships }
 }
 
 export async function startExpiryWorker() {
