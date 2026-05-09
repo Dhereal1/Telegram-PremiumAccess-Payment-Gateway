@@ -1,17 +1,19 @@
-$ErrorActionPreference = 'Stop'
-
 param(
   [string]$EnvPath,
   [string]$CloudflaredLogPath,
-  [string]$ProcessWeb = "local-web",
-  [string]$ProcessBot = "local-bot",
+  [string]$ProcessWeb,
+  [string]$ProcessBot,
   [switch]$UpdateTelegramWebhook
 )
+
+$ErrorActionPreference = 'Stop'
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Resolve-Path (Join-Path $here "..\\..") | Select-Object -ExpandProperty Path
 if (-not $EnvPath) { $EnvPath = Join-Path $projectRoot ".env" }
 if (-not $CloudflaredLogPath) { $CloudflaredLogPath = Join-Path $projectRoot "bin\\cloudflared.log" }
+if (-not $ProcessWeb) { $ProcessWeb = "local-web" }
+if (-not $ProcessBot) { $ProcessBot = "local-bot" }
 
 function Get-CloudflarePublicUrl([string]$logPath) {
   if (-not (Test-Path $logPath)) {
@@ -71,4 +73,3 @@ if ($UpdateTelegramWebhook) {
 }
 
 Write-Host "Done."
-
