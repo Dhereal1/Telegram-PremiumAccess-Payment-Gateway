@@ -22,6 +22,24 @@ export default async function handler(req, res) {
     return res.status(410).json({ error: 'Deprecated. Use /api/internal/run-workers instead.' })
   }
 
+  // Safety: refuse to run if multi-tenant wallets exist (prevents silent missed payments).
+  try {
+    const pool0 = getPool()
+    const wallets = await pool0.query(
+      `SELECT 1
+       FROM admins a
+       JOIN groups g ON g.admin_telegram_id = a.telegram_id
+       WHERE g.is_active = TRUE
+         AND a.wallet_address IS NOT NULL
+       LIMIT 1`,
+    )
+    if (wallets.rows.length) {
+      return res.status(410).json({ error: 'Multi-tenant mode detected. Do not use legacy cron verifier.' })
+    }
+  } catch {
+    // ignore: handled downstream if DB is unavailable
+  }
+
   const receiverAddress = process.env.TON_RECEIVER_ADDRESS
   const priceTon = Number(process.env.TON_PRICE_TON || '0.1')
   const apiUrl = process.env.TON_API_URL || 'https://toncenter.com/api/v2'
@@ -185,4 +203,3 @@ export default async function handler(req, res) {
 
   return res.json({ ok: true, processed, confirmed, accessGranted, skipped, receiverAddress, priceTon })
 }
-

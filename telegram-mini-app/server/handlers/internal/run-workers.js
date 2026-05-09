@@ -171,9 +171,32 @@ export default async function handler(req, res) {
   const auth = isAuthorizedCron(req)
   if (auth !== true) return res.status(auth.status).json({ error: auth.error })
 
+  // IMPORTANT: This endpoint is a serverless "burst runner" intended only for the legacy single-tenant setup.
+  // In multi-tenant mode, wallet polling must happen in the long-running `ton-listener` on an always-on machine.
+  if (process.env.ENABLE_SERVERLESS_WORKERS !== '1') {
+    return res.status(410).json({ error: 'Deprecated. Use long-running workers (ton-listener + BullMQ workers).' })
+  }
+
   const redisUrl = process.env.REDIS_URL
   if (!redisUrl) return res.status(500).json({ error: 'Missing REDIS_URL' })
   if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'Missing DATABASE_URL' })
+
+  // Safety: refuse to run if the DB indicates multi-tenant wallets exist (prevents silent missed payments).
+  try {
+    const wallets = await pool.query(
+      `SELECT 1
+       FROM admins a
+       JOIN groups g ON g.admin_telegram_id = a.telegram_id
+       WHERE g.is_active = TRUE
+         AND a.wallet_address IS NOT NULL
+       LIMIT 1`,
+    )
+    if (wallets.rows.length) {
+      return res.status(410).json({ error: 'Multi-tenant mode detected. Do not use /api/internal/run-workers.' })
+    }
+  } catch {
+    // If DB is unavailable, fall through and let the existing checks/error handling respond.
+  }
 
   const receiverAddress = process.env.TON_RECEIVER_ADDRESS
   const tonApiUrl = process.env.TON_API_URL || 'https://toncenter.com/api/v2'
