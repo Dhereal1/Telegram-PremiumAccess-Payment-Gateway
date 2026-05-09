@@ -37,7 +37,7 @@ function Set-DotEnvKeyValue([string]$path, [string]$key, [string]$value) {
   if (-not (Test-Path $path)) { throw "Missing env file: $path" }
   $content = Get-Content $path
 
-  $pattern = "^$([regex]::Escape($key))="
+  $pattern = ("^" + [regex]::Escape($key) + "=")
   $hasKey = $content | Where-Object { $_ -match $pattern } | Select-Object -First 1
 
   if ($hasKey) {
