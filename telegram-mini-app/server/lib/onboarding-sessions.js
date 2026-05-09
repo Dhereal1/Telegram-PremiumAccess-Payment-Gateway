@@ -6,6 +6,7 @@ const STEPS = new Set([
   'awaiting_duration',
   'awaiting_name',
   'awaiting_wallet',
+  'awaiting_wallet_verification',
   'complete',
 ])
 
@@ -59,4 +60,3 @@ export async function touchOnboardingSession({ adminId, telegramChatId }) {
   )
   return r.rows[0] || null
 }
-

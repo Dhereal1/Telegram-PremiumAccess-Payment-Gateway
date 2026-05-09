@@ -29,7 +29,7 @@ export async function upsertAdminWallet({ adminTelegramId, walletAddress }) {
   const r = await pool.query(
     `INSERT INTO admins (telegram_id, wallet_address)
      VALUES ($1,$2)
-     ON CONFLICT (telegram_id) DO UPDATE SET wallet_address=EXCLUDED.wallet_address
+     ON CONFLICT (telegram_id) DO UPDATE SET wallet_address=EXCLUDED.wallet_address, wallet_verified_at=NULL
      RETURNING *`,
     [String(adminTelegramId), String(walletAddress)],
   )

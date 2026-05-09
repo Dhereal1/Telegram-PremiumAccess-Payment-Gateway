@@ -1,11 +1,12 @@
 import crypto from 'node:crypto'
 import fetch from 'node-fetch'
 import { Telegraf } from 'telegraf'
+import { toNano } from '@ton/core'
 import { getLogger } from './lib/log.js'
 import { getPool } from './lib/db.js'
 import { getAdminByTelegramId, createGroupIfNotExists, upsertAdminWallet } from './lib/groups.js'
 import { deleteOnboardingSession, getOnboardingSession, upsertOnboardingSession } from './lib/onboarding-sessions.js'
-import { normalizeTonAddress } from './lib/toncenter.js'
+import { getTransactions, normalizeTonAddress, parseCommentFromTx } from './lib/toncenter.js'
 
 const log = getLogger()
 
@@ -94,6 +95,16 @@ function escapeHtml(s) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
+}
+
+function verifyCallbackData(chatId) {
+  return `wallet_verify:${String(chatId)}`
+}
+
+function parseVerifyCallbackData(data) {
+  const s = String(data || '')
+  if (!s.startsWith('wallet_verify:')) return null
+  return s.slice('wallet_verify:'.length)
 }
 
 async function safeDmOrGroupNotice({ ctx, botUsername, adminId, chatId }) {
@@ -196,6 +207,96 @@ export function createBot({ botToken, webAppUrl }) {
         ],
       },
     })
+  })
+
+  bot.on('callback_query', async (ctx) => {
+    const adminId = String(ctx.from?.id || '')
+    const data = ctx.callbackQuery?.data
+    const chatId = parseVerifyCallbackData(data)
+    if (!chatId) return
+
+    try {
+      await ctx.answerCbQuery('Checking wallet verification…', { show_alert: false }).catch(() => {})
+    } catch {
+      // ignore
+    }
+
+    const pool = getPool()
+    const session = await getOnboardingSession({ adminId, telegramChatId: chatId })
+    if (!session || session.step !== 'awaiting_wallet_verification') {
+      await ctx.reply('No pending wallet verification found.')
+      return
+    }
+
+    const collected = session.collected_data || {}
+    const nonce = String(collected.wallet_verification_nonce || '').trim()
+    const walletAddress = String(collected.wallet_address || '').trim()
+    if (!nonce || !walletAddress) {
+      await ctx.reply('Missing verification state. Please restart setup and enter your wallet again.')
+      return
+    }
+
+    const platformWallet = String(process.env.PLATFORM_WALLET_ADDRESS || '').trim()
+    if (!platformWallet) {
+      await ctx.reply('Platform wallet is not configured. Please contact support.')
+      return
+    }
+
+    const apiUrl = process.env.TON_API_URL || 'https://toncenter.com/api/v2'
+    const apiKey = process.env.TON_API_KEY || ''
+    const lookback = Number(process.env.WALLET_VERIFY_LOOKBACK_LIMIT || '50')
+    const minTon = Number(process.env.WALLET_VERIFY_MIN_TON || '0.001')
+    const minNano = BigInt(toNano(String(minTon)).toString())
+
+    const txs = await getTransactions({
+      apiUrl,
+      apiKey,
+      address: platformWallet,
+      limit: Number.isFinite(lookback) && lookback > 0 ? Math.floor(lookback) : 50,
+    })
+
+    const wantComment = `verify_admin:${adminId}:${nonce}`
+    const normalizedAdmin = normalizeTonAddress(walletAddress)
+    const normalizedPlatform = normalizeTonAddress(platformWallet)
+
+    const found = Array.isArray(txs)
+      ? txs.find((t) => {
+          const inMsg = t?.in_msg
+          if (!inMsg) return false
+          if (normalizedPlatform && normalizeTonAddress(inMsg.destination) !== normalizedPlatform) return false
+          if (normalizedAdmin && normalizeTonAddress(inMsg.source) !== normalizedAdmin) return false
+          const c = parseCommentFromTx(t) || ''
+          if (!String(c).includes(wantComment)) return false
+          try {
+            const v = BigInt(String(inMsg.value || '0'))
+            if (v < minNano) return false
+          } catch {
+            return false
+          }
+          return true
+        })
+      : null
+
+    if (!found) {
+      await ctx.reply(
+        `Not found yet.\n\nPlease send at least ${minTon} TON to:\n${platformWallet}\nWith comment:\n${wantComment}\n\nThen tap “I sent it” again.`,
+      )
+      return
+    }
+
+    // Mark verified and clear nonce.
+    await pool.query(
+      `UPDATE admins
+       SET wallet_verified_at = NOW(),
+           wallet_verification_nonce = NULL
+       WHERE telegram_id = $1`,
+      [String(adminId)],
+    )
+
+    await ctx.reply('✅ Wallet verified! You can now create premium groups.')
+    // Continue setup by asking for group name again (keep price/duration).
+    await upsertOnboardingSession({ adminId, telegramChatId: chatId, step: 'awaiting_name', collectedData: collected })
+    await ctx.reply('📝 Enter a name for this group:')
   })
 
   async function handleBotAdded({ ctx, chatId, adminId }) {
@@ -337,7 +438,29 @@ export function createBot({ botToken, webAppUrl }) {
         return
       }
 
-      // Admin already has a wallet on file; proceed to create the group.
+      if (!admin.wallet_verified_at) {
+        // Require wallet verification before creating groups.
+        const nonce = crypto.randomUUID().replace(/-/g, '').slice(0, 12)
+        data.wallet_address = admin.wallet_address
+        data.wallet_verification_nonce = nonce
+
+        await getPool().query(
+          `UPDATE admins
+           SET wallet_verification_nonce=$2, wallet_verification_requested_at=NOW()
+           WHERE telegram_id=$1`,
+          [String(adminId), String(nonce)],
+        )
+
+        await upsertOnboardingSession({ adminId, telegramChatId, step: 'awaiting_wallet_verification', collectedData: data })
+
+        const platformWallet = String(process.env.PLATFORM_WALLET_ADDRESS || '').trim()
+        const comment = `verify_admin:${adminId}:${nonce}`
+        await ctx.reply(
+          `🔐 Wallet verification required.\n\nSend at least 0.001 TON to:\n${platformWallet}\nWith comment:\n${comment}\n\nThen tap the button below.`,
+          { reply_markup: { inline_keyboard: [[{ text: '✅ I sent it', callback_data: verifyCallbackData(telegramChatId) }]] } },
+        )
+        return
+      }
 
       const groupId = crypto.randomUUID()
       const group = await createGroupIfNotExists({
@@ -371,25 +494,28 @@ export function createBot({ botToken, webAppUrl }) {
 
       await upsertAdminWallet({ adminTelegramId: adminId, walletAddress: normalized })
 
-      // Create group now that wallet exists
-      const groupId = crypto.randomUUID()
-      const group = await createGroupIfNotExists({
-        id: groupId,
-        telegramChatId: telegramChatId,
-        adminTelegramId: adminId,
-        name: String(data.name || 'Premium Group').slice(0, 120),
-        priceTon: Number(data.price_ton || 0.1),
-        durationDays: Number(data.duration_days || 30),
-      })
+      // Request proof-of-control via tiny transfer to platform wallet.
+      const nonce = crypto.randomUUID().replace(/-/g, '').slice(0, 12)
+      data.wallet_address = normalized
+      data.wallet_verification_nonce = nonce
 
-      await deleteOnboardingSession({ adminId, telegramChatId })
-      const botUsername = await getBotUsername()
-      const deepLink = botUsername
-        ? `https://t.me/${botUsername}?start=${encodeURIComponent(`g_${slugifyGroupName(group.name)}_${String(group.id)}`)}`
-        : makeMiniAppGroupUrl(normalizedWebAppUrl, group.id)
+      await getPool().query(
+        `UPDATE admins
+         SET wallet_verified_at=NULL,
+             wallet_verification_nonce=$2,
+             wallet_verification_requested_at=NOW()
+         WHERE telegram_id=$1`,
+        [String(adminId), String(nonce)],
+      )
 
-      const messageText = `✅ Your premium group is ready!\n\n🔗 Subscription link for <b>${escapeHtml(group.name)}</b>:\n<a href="${escapeHtml(deepLink)}">${escapeHtml(group.name)}</a>\n\nShare this with your audience to start earning.`
-      await ctx.reply(messageText, { parse_mode: 'HTML', disable_web_page_preview: true })
+      await upsertOnboardingSession({ adminId, telegramChatId, step: 'awaiting_wallet_verification', collectedData: data })
+
+      const platformWallet = String(process.env.PLATFORM_WALLET_ADDRESS || '').trim()
+      const comment = `verify_admin:${adminId}:${nonce}`
+      await ctx.reply(
+        `🔐 Verify your wallet.\n\nSend at least 0.001 TON to:\n${platformWallet}\nWith comment:\n${comment}\n\nThen tap the button below.`,
+        { reply_markup: { inline_keyboard: [[{ text: '✅ I sent it', callback_data: verifyCallbackData(telegramChatId) }]] } },
+      )
       return
     }
   })

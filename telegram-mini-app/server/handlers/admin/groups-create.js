@@ -4,7 +4,7 @@ import { setCors, readJson } from '../../lib/http.js'
 import { parseTelegramUser, verifyTelegramData } from '../../lib/telegram.js'
 import { parseJson } from '../../lib/validation.js'
 import { z } from 'zod'
-import { createGroup } from '../../lib/groups.js'
+import { createGroup, getAdminByTelegramId } from '../../lib/groups.js'
 
 const BodySchema = z.object({
   initData: z.string().min(1),
@@ -41,6 +41,11 @@ export default async function handler(req, res) {
   const tgUser = parseTelegramUser(initData)
   if (!tgUser?.id) return res.status(400).json({ error: 'Missing Telegram user' })
 
+  // Require verified admin wallet before creating groups.
+  const existingAdmin = await getAdminByTelegramId(String(tgUser.id))
+  if (!existingAdmin?.wallet_address) return res.status(400).json({ error: 'Admin wallet not set' })
+  if (!existingAdmin.wallet_verified_at) return res.status(403).json({ error: 'Admin wallet not verified' })
+
   const adminCheck = await requireRequesterIsChatAdmin({ chatId: telegram_chat_id, userId: tgUser.id })
   if (!adminCheck.ok) return res.status(403).json({ error: 'Not a chat admin', reason: adminCheck.reason })
 
@@ -56,4 +61,3 @@ export default async function handler(req, res) {
 
   return res.json({ ok: true, group })
 }
-
