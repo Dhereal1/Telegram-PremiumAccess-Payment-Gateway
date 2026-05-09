@@ -245,12 +245,16 @@ function TonSection({ user, tg }) {
           onClick={handlePayment}
           disabled={!walletAddress || payStatus === 'sending' || payStatus === 'sent'}
         >
-          {payStatus === 'sending' ? 'Sending…' : `Pay ${tonPriceDisplay} TON`}
+          {payStatus === 'sending' ? 'Sending…' : activeIntent?.expectedAmountTon ? `Pay ${tonPriceDisplay} TON` : 'Pay'}
         </button>
 
-        <p className="loading">
-          Receiver: <span className="mono">{receiverAddressDisplay}</span>
-        </p>
+        {activeIntent?.receiverAddress ? (
+          <p className="loading">
+            Receiver: <span className="mono">{receiverAddressDisplay}</span>
+          </p>
+        ) : (
+          <p className="loading">Receiver is shown after creating a payment intent.</p>
+        )}
         {payError ? <p className="loading">Error: {payError}</p> : null}
         {payStatus === 'sent' ? <p className="loading">Payment request sent. Waiting for confirmation…</p> : null}
         {payStatus === 'confirmed' ? <p className="loading">Payment confirmed ✅</p> : null}

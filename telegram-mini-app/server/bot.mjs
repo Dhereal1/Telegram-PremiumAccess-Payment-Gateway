@@ -337,6 +337,8 @@ export function createBot({ botToken, webAppUrl }) {
         return
       }
 
+      // Admin already has a wallet on file; proceed to create the group.
+
       const groupId = crypto.randomUUID()
       const group = await createGroupIfNotExists({
         id: groupId,
