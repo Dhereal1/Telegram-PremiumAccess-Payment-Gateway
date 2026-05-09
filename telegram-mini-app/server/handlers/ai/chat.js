@@ -24,7 +24,8 @@ export default async function handler(req, res) {
   if (message.length > 500) return res.status(400).json({ error: 'Message too long (max 500 chars)' })
   if (!groupId) return res.status(400).json({ error: 'Missing groupId' })
 
-  const verify = verifyTelegramData(initData, process.env.BOT_TOKEN, { maxAgeSeconds: 300 })
+  const maxAgeSeconds = Number(process.env.TELEGRAM_AUTH_MAX_AGE_SECONDS || '300')
+  const verify = verifyTelegramData(initData, process.env.BOT_TOKEN, { maxAgeSeconds })
   if (!verify.ok) return res.status(401).json({ error: 'Invalid Telegram data', reason: verify.reason })
 
   const tgUser = parseTelegramUser(initData)

@@ -20,7 +20,8 @@ export default async function handler(req, res) {
   const initData = (Array.isArray(header) ? header[0] : header) || null
   if (!initData) return res.status(400).json({ error: 'Missing initData' })
 
-  const verify = verifyTelegramData(String(initData), process.env.BOT_TOKEN, { maxAgeSeconds: 300 })
+  const maxAgeSeconds = Number(process.env.TELEGRAM_AUTH_MAX_AGE_SECONDS || '300')
+  const verify = verifyTelegramData(String(initData), process.env.BOT_TOKEN, { maxAgeSeconds })
   if (!verify.ok) return res.status(401).json({ error: 'Invalid Telegram data', reason: verify.reason })
 
   const tgUser = parseTelegramUser(String(initData))

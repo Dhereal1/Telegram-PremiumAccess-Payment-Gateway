@@ -25,7 +25,8 @@ export default async function handler(req, res) {
   const parsed = parseJson(body, BodySchema)
   const initData = parsed.initData
   const groupId = parsed.groupId || parsed.group_id || null
-  const verify = verifyTelegramData(initData, process.env.BOT_TOKEN, { maxAgeSeconds: 300 })
+  const maxAgeSeconds = Number(process.env.TELEGRAM_AUTH_MAX_AGE_SECONDS || '300')
+  const verify = verifyTelegramData(initData, process.env.BOT_TOKEN, { maxAgeSeconds })
   if (!verify.ok) return res.status(401).json({ error: 'Invalid Telegram data', reason: verify.reason })
 
   const tgUser = parseTelegramUser(initData)

@@ -19,7 +19,8 @@ export default async function handler(req, res) {
   const initData = getInitData(req)
   if (!initData) return res.status(400).json({ error: 'Missing initData' })
 
-  const verify = verifyTelegramData(initData, process.env.BOT_TOKEN, { maxAgeSeconds: 300 })
+  const maxAgeSeconds = Number(process.env.TELEGRAM_AUTH_MAX_AGE_SECONDS || '300')
+  const verify = verifyTelegramData(initData, process.env.BOT_TOKEN, { maxAgeSeconds })
   if (!verify.ok) return res.status(401).json({ error: 'Invalid Telegram data', reason: verify.reason })
 
   const tgUser = parseTelegramUser(initData)
@@ -28,4 +29,3 @@ export default async function handler(req, res) {
   const result = await getAdminEarnings({ adminId: String(tgUser.id), limit: 50 })
   return res.json(result)
 }
-
