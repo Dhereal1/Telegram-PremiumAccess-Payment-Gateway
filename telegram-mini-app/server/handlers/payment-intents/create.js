@@ -9,6 +9,7 @@ import { ipKey, rateLimit } from '../../lib/rate-limit.js'
 import { getGroupById } from '../../lib/groups.js'
 import { ensureMembership } from '../../lib/memberships.js'
 import { z } from 'zod'
+import { queryWithRetry } from '../../lib/db-retry.js'
 
 const log = getLogger()
 const GroupIdSchema = z.string().uuid()
@@ -71,7 +72,7 @@ export default async function handler(req, res) {
       durationDays = Number(group.duration_days || 30)
 
       // Admin wallet is the receiver
-      const walletRow = await getPool().query('SELECT wallet_address FROM admins WHERE telegram_id=$1', [String(group.admin_telegram_id)])
+      const walletRow = await queryWithRetry(getPool(), 'SELECT wallet_address FROM admins WHERE telegram_id=$1', [String(group.admin_telegram_id)], { attempts: 3 })
       const adminWallet = walletRow.rows[0]?.wallet_address
       if (!adminWallet) return res.status(500).json({ error: 'Admin wallet not set for group' })
       receiverAddress = adminWallet
@@ -84,10 +85,12 @@ export default async function handler(req, res) {
 
     const pool = getPool()
 
-    await pool.query(
+    await queryWithRetry(
+      pool,
       `INSERT INTO payment_intents (id, telegram_id, group_id, expected_amount_ton, receiver_address, status, created_at, expires_at)
        VALUES ($1, $2, $3, $4, $5, 'pending', NOW(), $6)`,
       [intentId, String(tgUser.id), groupId ? String(groupId) : null, expectedTon, receiverAddress, expiresAt.toISOString()],
+      { attempts: 3 },
     )
 
     const reference = groupId ? `tp:${tgUser.id}|pi:${intentId}|g:${groupId}` : `tp:${tgUser.id}|pi:${intentId}`

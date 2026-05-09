@@ -1,6 +1,7 @@
 import { getPool } from '../../lib/db.js'
 import { setCors, readJson } from '../../lib/http.js'
 import { verifyTelegramData, parseTelegramUser } from '../../lib/telegram.js'
+import { queryWithRetry } from '../../lib/db-retry.js'
 
 export default async function handler(req, res) {
   setCors(res)
@@ -29,13 +30,20 @@ export default async function handler(req, res) {
   if (!tgUser?.id) return res.status(400).json({ error: 'Missing Telegram user in initData' })
 
   const pool = getPool()
-  const result = await pool.query(
-    `UPDATE users
-     SET wallet_address = $1
-     WHERE telegram_id = $2
-     RETURNING *`,
-    [walletAddress, String(tgUser.id)],
-  )
+  let result
+  try {
+    result = await queryWithRetry(
+      pool,
+      `UPDATE users
+       SET wallet_address = $1
+       WHERE telegram_id = $2
+       RETURNING *`,
+      [walletAddress, String(tgUser.id)],
+      { attempts: 3 },
+    )
+  } catch {
+    return res.status(503).json({ error: 'Database temporarily unavailable. Please retry.' })
+  }
 
   if (result.rows.length === 0) {
     return res.status(404).json({ error: 'User not found. Call /api/auth/telegram first.' })
@@ -43,4 +51,3 @@ export default async function handler(req, res) {
 
   return res.json({ success: true, user: result.rows[0] })
 }
-
