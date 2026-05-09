@@ -42,6 +42,27 @@ Set Vercel environment variables:
 - `BOT_TOKEN`
 - `DATABASE_URL`
 - `WEB_APP_URL` (set this to your **production** Mini App URL, HTTPS)
+
+## Split deployment (recommended)
+
+**Vercel (frontend + API + webhook)**
+- Deploy `telegram-mini-app/` to Vercel (Root Directory = `telegram-mini-app`).
+- Set env vars in Vercel using `telegram-mini-app/.env.vercel.example` as a guide.
+- Set Telegram webhook to: `https://<vercel-domain>/api/telegram/webhook`
+  - If you set `TELEGRAM_WEBHOOK_SECRET`, pass it as `secret_token` when calling `setWebhook`.
+
+**Workers (laptop/VPS)**
+- Run long-lived processes locally using PM2:
+  - `verify-payments`
+  - `grant-access`
+  - `expiry`
+  - `ton-listener`
+  - `expiry-scheduler`
+- Use `telegram-mini-app/.env.workers.example` as a guide.
+- Start workers only:
+  - `npx pm2 start ecosystem.workers.config.cjs`
+
+The workers should use the same `WEB_APP_URL` as Vercel so renewal links open the stable Mini App URL.
 - (optional) `TELEGRAM_WEBHOOK_SECRET` (recommended)
 - (optional) `TELEGRAM_AUTH_MAX_AGE_SECONDS`
 - (optional) `PG_POOL_MAX`, `PG_IDLE_TIMEOUT_MS`, `PG_CONN_TIMEOUT_MS`
