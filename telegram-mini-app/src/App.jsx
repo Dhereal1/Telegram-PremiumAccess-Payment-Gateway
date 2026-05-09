@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 
 function App() {
-  const [user, setUser] = useState(null)
+  const [tgUser, setTgUser] = useState(null)
+  const [dbUser, setDbUser] = useState(null)
   const [colorScheme, setColorScheme] = useState(null)
   const [authStatus, setAuthStatus] = useState('idle')
   const [authError, setAuthError] = useState(null)
@@ -47,7 +48,7 @@ function App() {
     setColorScheme(tg.colorScheme ?? null)
 
     const telegramUser = tg.initDataUnsafe?.user ?? null
-    setUser(telegramUser)
+    setTgUser(telegramUser)
   }, [tg])
 
   useEffect(() => {
@@ -74,7 +75,7 @@ function App() {
 
         if (!cancelled) {
           setAuthStatus('ok')
-          if (data?.user) setUser(data.user)
+          if (data?.user) setDbUser(data.user)
         }
       } catch (e) {
         if (!cancelled) {
@@ -138,15 +139,15 @@ function App() {
       </header>
 
       <main className="card">
-        {user ? (
+        {tgUser ? (
           <>
             <div className="row">
               <span className="label">Telegram user ID</span>
-              <span className="value">{user.id}</span>
+              <span className="value">{tgUser.id}</span>
             </div>
             <div className="row">
               <span className="label">Username</span>
-              <span className="value">{user.username ? `@${user.username}` : '—'}</span>
+              <span className="value">{tgUser.username ? `@${tgUser.username}` : '—'}</span>
             </div>
           </>
         ) : (
@@ -176,7 +177,7 @@ function App() {
       ) : tonUiState.status === 'ready' ? (
         (() => {
           const TonSection = tonUiState.Component
-          return <TonSection user={user} tg={tg} />
+          return <TonSection user={tgUser} tg={tg} dbUser={dbUser} />
         })()
       ) : tonUiState.status === 'error' ? (
         <section className="card">
