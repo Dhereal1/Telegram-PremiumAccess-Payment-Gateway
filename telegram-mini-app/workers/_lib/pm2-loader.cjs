@@ -14,6 +14,18 @@ try {
   dns.setDefaultResultOrder('ipv4first');
 } catch {}
 
+// Optional override to use known-stable resolvers on flaky networks.
+// Example: DNS_SERVERS=1.1.1.1,8.8.8.8
+try {
+  if (process.env.DNS_SERVERS) {
+    const servers = String(process.env.DNS_SERVERS)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (servers.length) dns.setServers(servers);
+  }
+} catch {}
+
 const script = process.argv[2];
 if (!script) {
   console.error('Usage: node workers/_lib/pm2-loader.cjs <entry.mjs>');

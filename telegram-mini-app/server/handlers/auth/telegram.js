@@ -42,7 +42,7 @@ export default async function handler(req, res) {
       [String(tgUser.id), tgUser.username ?? null, tgUser.first_name ?? null, tgUser.last_name ?? null],
       { attempts: 3 },
     )
-  } catch (e) {
+  } catch {
     return res.status(503).json({ error: 'Database temporarily unavailable. Please retry.' })
   }
 

@@ -66,12 +66,26 @@ if ($UpdateTelegramWebhook) {
   $botToken = ($envText | Where-Object { $_ -match '^BOT_TOKEN=' } | Select-Object -First 1) -replace '^BOT_TOKEN=', ''
   if (-not $botToken) { throw "BOT_TOKEN missing in .env; can't update webhook." }
 
-  $webhookUrl = ($publicUrl.TrimEnd('/')) + "/api/telegram/webhook"
-  Write-Host "Updating Telegram webhook to: $webhookUrl"
+  $mode = ($envText | Where-Object { $_ -match '^TELEGRAM_UPDATE_MODE=' } | Select-Object -First 1) -replace '^TELEGRAM_UPDATE_MODE=', ''
+  if (-not $mode) { $mode = "polling" }
+  $mode = $mode.Trim().ToLowerInvariant()
 
-  $body = @{ url = $webhookUrl } | ConvertTo-Json -Compress
-  $resp = Invoke-RestMethod -Method Post -Uri ("https://api.telegram.org/bot$botToken/setWebhook") -ContentType "application/json" -Body $body
-  Write-Host ("setWebhook ok=" + $resp.ok)
+  if ($mode -eq "webhook") {
+    $webhookUrl = ($publicUrl.TrimEnd('/')) + "/api/telegram/webhook"
+    Write-Host "Updating Telegram webhook to: $webhookUrl"
+
+    $secret = ($envText | Where-Object { $_ -match '^TELEGRAM_WEBHOOK_SECRET=' } | Select-Object -First 1) -replace '^TELEGRAM_WEBHOOK_SECRET=', ''
+    $payload = @{ url = $webhookUrl }
+    if ($secret) { $payload.secret_token = $secret }
+
+    $body = $payload | ConvertTo-Json -Compress
+    $resp = Invoke-RestMethod -Method Post -Uri ("https://api.telegram.org/bot$botToken/setWebhook") -ContentType "application/json" -Body $body
+    Write-Host ("setWebhook ok=" + $resp.ok)
+  } else {
+    Write-Host "TELEGRAM_UPDATE_MODE=$mode; deleting webhook to allow polling."
+    $resp = Invoke-RestMethod -Method Post -Uri ("https://api.telegram.org/bot$botToken/deleteWebhook?drop_pending_updates=true")
+    Write-Host ("deleteWebhook ok=" + $resp.ok)
+  }
 }
 
 Write-Host "Done."

@@ -7,12 +7,14 @@ import { kickChatMember } from '../../services/telegram.service.mjs'
 import { logFailedJob } from '../_lib/failedJobs.mjs'
 import { ExpiryJobSchema, parseJob } from '../_lib/jobSchemas.mjs'
 import { getPool } from '../../db/index.mjs'
+import { queryWithRetry } from '../_lib/queryRetry.mjs'
 
 const logger = getWorkerLogger()
 const pool = getDb()
 
 async function expireBatch(limit) {
-  const res = await pool.query(
+  const res = await queryWithRetry(
+    pool,
     `SELECT id, telegram_id
      FROM users
      WHERE payment_status = true
@@ -25,7 +27,8 @@ async function expireBatch(limit) {
 
   let expired = 0
   for (const row of res.rows) {
-    const upd = await pool.query(
+    const upd = await queryWithRetry(
+      pool,
       `UPDATE users
        SET payment_status=false, access_granted=false, subscription_status='expired'
        WHERE id=$1
@@ -56,7 +59,8 @@ async function expireBatch(limit) {
 }
 
 async function expireMembershipBatch(limit) {
-  const res = await pool.query(
+  const res = await queryWithRetry(
+    pool,
     `SELECT id, telegram_id, group_id
      FROM memberships
      WHERE payment_status = true
@@ -69,7 +73,8 @@ async function expireMembershipBatch(limit) {
 
   let expired = 0
   for (const row of res.rows) {
-    const upd = await pool.query(
+    const upd = await queryWithRetry(
+      pool,
       `UPDATE memberships
        SET payment_status=false,
            access_granted=false,
