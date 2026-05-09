@@ -18,6 +18,13 @@ async function main() {
 
   // JSON body parsing for our API handlers (they still fall back to stream parsing when needed).
   app.use(express.json({ limit: '2mb' }))
+  // Normalize JSON parse failures to a JSON error response (Express default is HTML).
+  app.use((err, req, res, next) => {
+    if (err && err.type === 'entity.parse.failed') {
+      return res.status(400).json({ error: 'Invalid JSON body' })
+    }
+    return next(err)
+  })
 
   // Mount the existing Vercel-style API router under /api.
   // Express strips the mount path from req.url, which is fine because our router
