@@ -20,10 +20,14 @@ function Get-CloudflarePublicUrl([string]$logPath) {
     throw "Missing cloudflared log file: $logPath. Is the cloudflared PM2 process running?"
   }
 
-  $lines = Get-Content $logPath -Tail 400
-  $match = $lines | Select-String -Pattern "https://[a-z0-9-]+\\.trycloudflare\\.com" -AllMatches | Select-Object -Last 1
-  if (-not $match) { throw "No trycloudflare URL found in $logPath yet. Wait a few seconds and retry." }
-  $url = [string]$match.Matches[0].Value
+  # Use -Raw + regex to avoid edge cases with Select-String on some Windows setups.
+  $content = Get-Content $logPath -Raw
+  $pattern = "https://[a-z0-9-]+\\.trycloudflare\\.com"
+  $matches = [regex]::Matches($content, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+  if (-not $matches -or $matches.Count -eq 0) {
+    throw "No trycloudflare URL found in $logPath yet. Wait a few seconds and retry."
+  }
+  $url = [string]$matches[$matches.Count - 1].Value
   if (-not $url.EndsWith("/")) { $url = $url + "/" }
   return $url
 }
