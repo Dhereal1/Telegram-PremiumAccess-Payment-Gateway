@@ -54,7 +54,8 @@ export async function processAccessGrantJob(job) {
       await logEvent({ userId: String(claimed.telegram_id), type: 'invite_regen_requested', metadata: {} }).catch(() => {})
     }
 
-    const inviteLink = await createInviteLink({ chatId, memberLimit: 1, expireSeconds: 600 })
+    // Give users enough time to click/complete join flow (wallet delays, network issues, Telegram UI delays).
+    const inviteLink = await createInviteLink({ chatId, memberLimit: 1, expireSeconds: 60 * 60 * 24 })
     await setMembershipInviteInfo({ membershipId, inviteLink })
     await logEvent({ userId: String(claimed.telegram_id), type: 'invite_sent', metadata: { inviteLink, groupId: String(membership.group_id) } })
 
