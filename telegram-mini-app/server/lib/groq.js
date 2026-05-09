@@ -40,10 +40,11 @@ export async function chatComplete({ system, user, maxTokens = 200 }) {
     const text = data?.choices?.[0]?.message?.content
     if (!res.ok || !text) return null
     return String(text).trim() || null
-  } catch {
-    return null
+  } catch (e) {
+    // Caller can decide whether to fail open or return a fallback message.
+    // Throwing here improves observability in serverless logs.
+    throw e
   } finally {
     clearTimeout(timeout)
   }
 }
-

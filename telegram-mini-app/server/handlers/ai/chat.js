@@ -3,6 +3,9 @@ import { verifyTelegramData, parseTelegramUser } from '../../lib/telegram.js'
 import { rateLimit } from '../../lib/rate-limit.js'
 import { getPool } from '../../lib/db.js'
 import { chatComplete } from '../../lib/groq.js'
+import { getLogger } from '../../lib/log.js'
+
+const log = getLogger()
 
 export default async function handler(req, res) {
   setCors(res)
@@ -44,12 +47,17 @@ export default async function handler(req, res) {
   const group = g.rows[0]
   if (!group) return res.status(404).json({ error: 'Group not found' })
 
-  const reply =
-    (await chatComplete({
+  let reply = null
+  try {
+    reply = await chatComplete({
       system: `You are a helpful assistant for the "${group.name}" Telegram community.\nAnswer questions about the group, subscriptions, and TON payments.\nBe concise (max 3 sentences). Do not discuss other topics.`,
       user: message,
       maxTokens: 200,
-    })) || 'AI assistant is not available right now.'
+    })
+  } catch (e) {
+    log.warn({ err: String(e?.message || e) }, 'ai_chat_failed')
+  }
+  reply = reply || 'AI assistant is not available right now.'
 
   return res.json({ reply })
 }
