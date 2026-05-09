@@ -1,4 +1,5 @@
 import { getPool } from './db.js'
+import { toFriendlyAddress } from './toncenter.js'
 
 export async function getAdminByTelegramId(adminTelegramId) {
   const pool = getPool()
@@ -26,12 +27,13 @@ export async function listGroupsByAdmin(adminTelegramId) {
 
 export async function upsertAdminWallet({ adminTelegramId, walletAddress }) {
   const pool = getPool()
+  const storedWallet = toFriendlyAddress(String(walletAddress)) || String(walletAddress)
   const r = await pool.query(
     `INSERT INTO admins (telegram_id, wallet_address)
      VALUES ($1,$2)
      ON CONFLICT (telegram_id) DO UPDATE SET wallet_address=EXCLUDED.wallet_address, wallet_verified_at=NULL
      RETURNING *`,
-    [String(adminTelegramId), String(walletAddress)],
+    [String(adminTelegramId), storedWallet],
   )
   return r.rows[0]
 }

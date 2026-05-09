@@ -10,6 +10,16 @@ export function normalizeTonAddress(address) {
   }
 }
 
+// For displaying/sending via TonConnect (EQ.../UQ... url-safe bounceable).
+export function toFriendlyAddress(address) {
+  if (!address || typeof address !== 'string') return null
+  try {
+    return Address.parse(address).toString({ bounceable: true, urlSafe: true })
+  } catch {
+    return null
+  }
+}
+
 export function parseCommentFromTx(tx) {
   const msg = tx?.in_msg
   if (!msg) return null

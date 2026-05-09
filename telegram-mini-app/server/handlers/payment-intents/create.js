@@ -10,10 +10,18 @@ import { getGroupById } from '../../lib/groups.js'
 import { ensureMembership } from '../../lib/memberships.js'
 import { z } from 'zod'
 import { queryWithRetry } from '../../lib/db-retry.js'
-import { toNano } from '@ton/core'
+import { Address, toNano } from '@ton/core'
 
 const log = getLogger()
 const GroupIdSchema = z.string().uuid()
+
+function toUserFriendlyAddress(raw) {
+  try {
+    return Address.parse(String(raw)).toString({ bounceable: true, urlSafe: true })
+  } catch {
+    return String(raw)
+  }
+}
 
 function nanoToTonString(nano) {
   const n = typeof nano === 'bigint' ? nano : BigInt(String(nano || '0'))
@@ -79,7 +87,7 @@ export default async function handler(req, res) {
     const walletRow = await queryWithRetry(getPool(), 'SELECT wallet_address FROM admins WHERE telegram_id=$1', [String(group.admin_telegram_id)], { attempts: 3 })
     const adminWallet = walletRow.rows[0]?.wallet_address
     if (!adminWallet) return res.status(500).json({ error: 'Admin wallet not set for group' })
-    const receiverAddress = adminWallet
+    const receiverAddress = toUserFriendlyAddress(adminWallet)
 
     // Ensure membership exists for this group/user
     await ensureMembership({ groupId: String(group.id), telegramId: String(tgUser.id) })
@@ -101,6 +109,7 @@ export default async function handler(req, res) {
     // - platform fee to PLATFORM_WALLET_ADDRESS
     // - remainder to the admin receiver address
     const platformWalletAddress = String(process.env.PLATFORM_WALLET_ADDRESS || '').trim() || null
+    const platformWalletAddressFriendly = platformWalletAddress ? toUserFriendlyAddress(platformWalletAddress) : null
     const feePctRaw = String(process.env.PLATFORM_FEE_PERCENT || '10').trim()
     const feePct = Number(feePctRaw)
     const feePctInt = Number.isFinite(feePct) && feePct > 0 ? Math.floor(feePct) : 0
@@ -124,7 +133,7 @@ export default async function handler(req, res) {
       expiresAt: expiresAt.toISOString(),
       durationDays,
       groupId: String(groupId),
-      platformWalletAddress,
+      platformWalletAddress: platformWalletAddressFriendly,
       platformFeePercent: feePctInt || 0,
       platformFeeTon,
       adminAmountTon,

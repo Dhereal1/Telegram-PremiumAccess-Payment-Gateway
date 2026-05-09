@@ -6,7 +6,7 @@ import { getLogger } from './lib/log.js'
 import { getPool } from './lib/db.js'
 import { getAdminByTelegramId, createGroupIfNotExists, upsertAdminWallet } from './lib/groups.js'
 import { deleteOnboardingSession, getOnboardingSession, upsertOnboardingSession } from './lib/onboarding-sessions.js'
-import { getTransactions, normalizeTonAddress, parseCommentFromTx } from './lib/toncenter.js'
+import { getTransactions, normalizeTonAddress, parseCommentFromTx, toFriendlyAddress } from './lib/toncenter.js'
 
 const log = getLogger()
 
@@ -502,17 +502,19 @@ export function createBot({ botToken, webAppUrl }) {
 
     if (step === 'awaiting_wallet') {
       const walletRaw = String(inputText).trim()
-      const normalized = normalizeTonAddress(walletRaw)
-      if (!normalized) {
+      const raw = normalizeTonAddress(walletRaw)
+      if (!raw) {
         await ctx.reply('That does not look like a valid TON address. Please paste a valid wallet address (starts with EQ…/UQ…).')
         return
       }
 
-      await upsertAdminWallet({ adminTelegramId: adminId, walletAddress: normalized })
+      const friendly = toFriendlyAddress(walletRaw)
+      const walletToStore = friendly || raw
+      await upsertAdminWallet({ adminTelegramId: adminId, walletAddress: walletToStore })
 
       // Request proof-of-control via tiny transfer to platform wallet.
       const nonce = crypto.randomUUID().replace(/-/g, '').slice(0, 12)
-      data.wallet_address = normalized
+      data.wallet_address = walletToStore
       data.wallet_verification_nonce = nonce
 
       await getPool().query(
