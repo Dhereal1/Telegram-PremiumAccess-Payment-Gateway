@@ -1,13 +1,13 @@
 module.exports = {
   apps: [
     {
-      // Public HTTPS tunnel for local dev. Prefer ngrok for stability on spotty DNS.
-      // Install via: scripts/install-ngrok.ps1
-      name: 'ngrok',
-      script: 'bin/ngrok.exe',
-      // ngrok requires an authtoken (free). Set NGROK_AUTHTOKEN in .env and run:
-      //   bin/ngrok.exe config add-authtoken %NGROK_AUTHTOKEN%
-      args: 'http http://localhost:3000 --log=stdout',
+      // Public HTTPS tunnel for local dev.
+      // Install via: scripts/install-cloudflared.ps1
+      name: 'cloudflared',
+      script: 'bin/cloudflared.exe',
+      // Account-less quick tunnels rotate URLs on restart; scripts/dev/sync-webapp-url-cloudflare.ps1
+      // updates WEB_APP_URL automatically from the log file.
+      args: 'tunnel --no-autoupdate --url http://localhost:3000 --loglevel info --logfile bin/cloudflared.log',
       exec_interpreter: 'none',
       cwd: __dirname,
     },
