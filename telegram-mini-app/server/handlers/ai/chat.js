@@ -7,6 +7,17 @@ import { getLogger } from '../../lib/log.js'
 
 const log = getLogger()
 
+function fmtDate(d) {
+  if (!d) return null
+  try {
+    const dt = typeof d === 'string' ? new Date(d) : d
+    if (!dt || Number.isNaN(dt.getTime())) return null
+    return dt.toISOString()
+  } catch {
+    return null
+  }
+}
+
 export default async function handler(req, res) {
   setCors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
@@ -23,6 +34,7 @@ export default async function handler(req, res) {
   const groupId = body?.groupId
   const message = String(body?.message || '').trim()
 
+  if (!initData) return res.status(400).json({ error: 'Missing initData' })
   if (!message) return res.status(400).json({ error: 'Missing message' })
   if (message.length > 500) return res.status(400).json({ error: 'Message too long (max 500 chars)' })
   if (!groupId) return res.status(400).json({ error: 'Missing groupId' })
@@ -43,16 +55,75 @@ export default async function handler(req, res) {
   }
 
   const pool = getPool()
-  const g = await pool.query('SELECT id, name FROM groups WHERE id=$1 AND is_active=TRUE', [String(groupId)])
+  const g = await pool.query(
+    `SELECT id, name, price_ton, duration_days, admin_telegram_id
+     FROM groups
+     WHERE id=$1 AND is_active=TRUE`,
+    [String(groupId)],
+  )
   const group = g.rows[0]
   if (!group) return res.status(404).json({ error: 'Group not found' })
 
+  const admin = await pool.query('SELECT telegram_id, wallet_address, wallet_verified_at FROM admins WHERE telegram_id=$1', [
+    String(group.admin_telegram_id),
+  ])
+  const adminRow = admin.rows[0] || null
+
+  const m = await pool.query(
+    `SELECT subscription_status, payment_status, access_granted, expiry_date, current_period_end, last_payment_at
+     FROM memberships
+     WHERE group_id=$1 AND telegram_id=$2`,
+    [String(group.id), String(tgUser.id)],
+  )
+  const membership = m.rows[0] || null
+
+  const platformWalletAddress = String(process.env.PLATFORM_WALLET_ADDRESS || '').trim() || null
+  const platformFeePercentRaw = String(process.env.PLATFORM_FEE_PERCENT || '10').trim()
+  const platformFeePercent = Number.isFinite(Number(platformFeePercentRaw)) ? Math.max(0, Math.floor(Number(platformFeePercentRaw))) : 0
+
   let reply = null
   try {
+    const facts = {
+      group: {
+        id: String(group.id),
+        name: String(group.name),
+        price_ton: Number(group.price_ton),
+        duration_days: Number(group.duration_days || 30),
+      },
+      wallets: {
+        admin_receiver_wallet: adminRow?.wallet_address ? String(adminRow.wallet_address) : null,
+        platform_fee_wallet: platformWalletAddress,
+      },
+      platform_fee: {
+        percent: platformWalletAddress ? platformFeePercent : 0,
+        enabled: Boolean(platformWalletAddress && platformFeePercent > 0),
+      },
+      user: {
+        telegram_id: String(tgUser.id),
+        membership: membership
+          ? {
+              subscription_status: String(membership.subscription_status || 'inactive'),
+              payment_status: Boolean(membership.payment_status),
+              access_granted: Boolean(membership.access_granted),
+              expiry_date: fmtDate(membership.expiry_date),
+              current_period_end: fmtDate(membership.current_period_end),
+              last_payment_at: fmtDate(membership.last_payment_at),
+            }
+          : null,
+      },
+      system_rules: [
+        'Strictly answer using FACTS_JSON only. If a detail is not in FACTS_JSON, say "I don’t know from my data" and suggest the correct next step.',
+        'Never invent wallet addresses, transaction hashes, payment confirmations, durations, or prices.',
+        'If asked to create/manage groups: groups are created in the Telegram bot onboarding, not in the Mini App.',
+        'Keep replies concise (max 3 sentences).',
+      ],
+    }
+
     reply = await chatComplete({
-      system: `You are a helpful assistant for the "${group.name}" Telegram community.\nAnswer questions about the group, subscriptions, and TON payments.\nBe concise (max 3 sentences). Do not discuss other topics.`,
+      system: `You are the support assistant for a Telegram premium group subscription system.\n\nFACTS_JSON:\n${JSON.stringify(facts)}\n\nINSTRUCTIONS:\n- Only use FACTS_JSON as your source of truth.\n- If the user asks for anything not present in FACTS_JSON, say you don't know from your data.\n- For TON payments: explain what the user should do in the app (connect wallet, pay the exact amount, include the reference/comment shown by the app).\n- Do not discuss unrelated topics.\n- Max 3 sentences.`,
       user: message,
       maxTokens: 200,
+      temperature: 0.2,
     })
   } catch (e) {
     log.warn({ err: String(e?.message || e) }, 'ai_chat_failed')

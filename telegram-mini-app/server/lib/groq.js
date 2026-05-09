@@ -8,11 +8,12 @@ function getGroqKey() {
   return key || null
 }
 
-export async function chatComplete({ system, user, maxTokens = 200 }) {
+export async function chatComplete({ system, user, maxTokens = 200, temperature = 0.7 }) {
   const apiKey = getGroqKey()
   if (!apiKey) return null
 
   const max_tokens = Math.min(300, Math.max(1, Number(maxTokens) || 200))
+  const temp = Math.max(0, Math.min(1, Number(temperature) || 0.7))
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 10_000)
@@ -26,7 +27,7 @@ export async function chatComplete({ system, user, maxTokens = 200 }) {
       },
       body: JSON.stringify({
         model: process.env.GROQ_MODEL || 'llama3-8b-8192',
-        temperature: 0.7,
+        temperature: temp,
         max_tokens,
         messages: [
           { role: 'system', content: String(system || '') },
