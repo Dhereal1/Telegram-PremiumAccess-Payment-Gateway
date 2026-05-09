@@ -32,6 +32,9 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
+  // Strict SaaS mode: groups are created only via the bot onboarding flow.
+  return res.status(410).json({ error: 'Disabled. Create groups via the bot onboarding flow.' })
+
   const body = await readJson(req)
   const { initData, telegram_chat_id, name, price_ton, duration_days } = parseJson(body, BodySchema)
 

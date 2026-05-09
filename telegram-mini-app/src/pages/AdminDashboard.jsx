@@ -16,16 +16,7 @@ function AdminDashboard({ tg }) {
   const [earnings, setEarnings] = useState(null)
   const [withdrawing, setWithdrawing] = useState(false)
 
-  const [modalOpen, setModalOpen] = useState(false)
-  const [creating, setCreating] = useState(false)
   const [toast, setToast] = useState(null)
-
-  const [form, setForm] = useState({
-    name: '',
-    telegram_chat_id: '',
-    price_ton: '0.01',
-    duration_days: '30',
-  })
 
   useEffect(() => {
     if (!initData) return
@@ -114,39 +105,6 @@ function AdminDashboard({ tg }) {
     }
   }
 
-  async function submitCreate() {
-    try {
-      setCreating(true)
-      setToast(null)
-      const payload = {
-        initData,
-        telegram_chat_id: form.telegram_chat_id.trim(),
-        name: form.name.trim(),
-        price_ton: Number(form.price_ton),
-        duration_days: Number(form.duration_days),
-      }
-
-      const resp = await fetch('/api/admin/groups/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      const data = await resp.json().catch(() => null)
-      if (!resp.ok) throw new Error(data?.reason ? `${data.error}: ${data.reason}` : data?.error || `Create failed (${resp.status})`)
-
-      setToast('Group created ✅')
-      setTimeout(() => setToast(null), 2000)
-      setModalOpen(false)
-      setForm({ name: '', telegram_chat_id: '', price_ton: '0.01', duration_days: '30' })
-      await refreshGroups()
-    } catch (e) {
-      setToast(String(e?.message || e))
-      setTimeout(() => setToast(null), 2500)
-    } finally {
-      setCreating(false)
-    }
-  }
-
   return (
     <section className="card" style={{ display: 'grid', gap: 12 }}>
       <section className="card">
@@ -192,12 +150,7 @@ function AdminDashboard({ tg }) {
           <div className="label" style={{ fontSize: 16 }}>
             Your Premium Groups
           </div>
-          <div className="loading">Manage groups, pricing, and share links.</div>
-        </div>
-        <div style={{ marginLeft: 'auto' }}>
-          <button className="payBtn" onClick={() => setModalOpen(true)}>
-            Create New Group
-          </button>
+          <div className="loading">Groups are created via the bot onboarding flow. Use this dashboard to manage and share links.</div>
         </div>
       </div>
 
@@ -251,82 +204,6 @@ function AdminDashboard({ tg }) {
         </div>
       ) : null}
 
-      {modalOpen ? (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.55)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 16,
-            zIndex: 50,
-          }}
-          onClick={() => (creating ? null : setModalOpen(false))}
-        >
-          <div className="card" style={{ width: '100%', maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
-            <div className="row">
-              <span className="label" style={{ fontSize: 16 }}>
-                Create Group
-              </span>
-              <span style={{ marginLeft: 'auto' }}>
-                <button className="payBtn" onClick={() => setModalOpen(false)} disabled={creating}>
-                  Close
-                </button>
-              </span>
-            </div>
-
-            <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
-              <label className="loading">
-                Group Name
-                <input
-                  value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  style={{ width: '100%', marginTop: 6, padding: 10, borderRadius: 10, border: '1px solid #333', background: '#111', color: '#fff' }}
-                />
-              </label>
-
-              <label className="loading">
-                Telegram Chat ID
-                <input
-                  value={form.telegram_chat_id}
-                  onChange={(e) => setForm((f) => ({ ...f, telegram_chat_id: e.target.value }))}
-                  placeholder="-100xxxxxxxxxx"
-                  style={{ width: '100%', marginTop: 6, padding: 10, borderRadius: 10, border: '1px solid #333', background: '#111', color: '#fff' }}
-                />
-              </label>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <label className="loading">
-                  Price (TON)
-                  <input
-                    value={form.price_ton}
-                    onChange={(e) => setForm((f) => ({ ...f, price_ton: e.target.value }))}
-                    style={{ width: '100%', marginTop: 6, padding: 10, borderRadius: 10, border: '1px solid #333', background: '#111', color: '#fff' }}
-                  />
-                </label>
-                <label className="loading">
-                  Duration (days)
-                  <input
-                    value={form.duration_days}
-                    onChange={(e) => setForm((f) => ({ ...f, duration_days: e.target.value }))}
-                    style={{ width: '100%', marginTop: 6, padding: 10, borderRadius: 10, border: '1px solid #333', background: '#111', color: '#fff' }}
-                  />
-                </label>
-              </div>
-
-              <button
-                className="payBtn"
-                onClick={submitCreate}
-                disabled={creating || !form.name.trim() || !form.telegram_chat_id.trim()}
-              >
-                {creating ? 'Creating…' : 'Create'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
       </section>
     </section>
   )
