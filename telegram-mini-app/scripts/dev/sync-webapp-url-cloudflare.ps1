@@ -36,16 +36,13 @@ function Get-CloudflarePublicUrl([string]$logPath) {
 function Set-DotEnvKeyValue([string]$path, [string]$key, [string]$value) {
   if (-not (Test-Path $path)) { throw "Missing env file: $path" }
   $content = Get-Content $path
-
-  $pattern = ("^" + [regex]::Escape($key) + "=")
-  $hasKey = $content | Where-Object { $_ -match $pattern } | Select-Object -First 1
-
-  if ($hasKey) {
-    $content = $content -replace $pattern + ".*$", "$key=$value"
+  $line = "$key=$value"
+  $pattern = ("^" + [regex]::Escape($key) + "=.*$")
+  if ($content | Where-Object { $_ -match $pattern }) {
+    $content = $content -replace $pattern, $line
   } else {
-    $content += "$key=$value"
+    $content += $line
   }
-
   Set-Content -Path $path -Value $content
 }
 
