@@ -22,7 +22,8 @@ function Get-CloudflarePublicUrl([string]$logPath) {
 
   # Use -Raw + regex to avoid edge cases with Select-String on some Windows setups.
   $content = Get-Content $logPath -Raw
-  $pattern = "https://[a-z0-9-]+\\.trycloudflare\\.com"
+  # Use character classes for dots to avoid escaping pitfalls across shells.
+  $pattern = "https://[a-z0-9-]+[.]trycloudflare[.]com"
   $matches = [regex]::Matches($content, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
   if (-not $matches -or $matches.Count -eq 0) {
     throw "No trycloudflare URL found in $logPath yet. Wait a few seconds and retry."
