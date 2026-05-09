@@ -25,6 +25,10 @@ const WorkerEnvSchema = z.object({
 
   PLATFORM_FEE_PERCENT: z.string().default('10').optional(),
 
+  // Optional AI (Groq)
+  GROQ_API_KEY: z.string().optional(),
+  GROQ_MODEL: z.string().optional(),
+
   LOG_LEVEL: z.string().optional(),
 });
 

@@ -9,6 +9,7 @@ import { logFailedJob } from '../_lib/failedJobs.mjs'
 import { logEvent } from '../../services/subscriptionEvents.service.mjs'
 import { AccessGrantJobSchema, parseJob } from '../_lib/jobSchemas.mjs'
 import { getPool } from '../../db/index.mjs'
+import { chatComplete } from '../../server/lib/groq.js'
 
 const logger = getWorkerLogger()
 
@@ -31,12 +32,13 @@ export async function processAccessGrantJob(job) {
 
     // Load group for chat id
     const pool = getPool()
-    const g = await pool.query('SELECT id, telegram_chat_id FROM groups WHERE id=$1', [String(membership.group_id)])
+    const g = await pool.query('SELECT id, telegram_chat_id, name, price_ton, duration_days FROM groups WHERE id=$1', [String(membership.group_id)])
     const chatId = g.rows[0]?.telegram_chat_id
     if (!chatId) {
       logger.warn({ jobId: job.id, queue: 'access-grant', membershipId }, 'access_grant_group_not_found')
       return
     }
+    const group = g.rows[0]
 
     const claimed = forceRegenerate ? membership : await markMembershipAccessGrantedIfNotExists(membershipId)
     if (!claimed) {
@@ -54,6 +56,15 @@ export async function processAccessGrantJob(job) {
       await logEvent({ userId: String(claimed.telegram_id), type: 'invite_sent', metadata: { inviteLink, groupId: String(membership.group_id) } })
 
       await sendMessage(telegramId, `✅ Payment confirmed!\n\nJoin here:\n${inviteLink}`)
+      // Optional AI congrats message (fails silently if Groq not configured).
+      const aiCongrats = await chatComplete({
+        system: `You are a friendly community assistant for \"${group?.name || 'this group'}\".\nWrite a short congratulations message (2 sentences) for a user who just subscribed. Tell them they now have access and to use the invite link. Be warm and welcoming.`,
+        user: `User just paid ${String(group?.price_ton ?? '')} TON and got access to ${String(group?.name || 'this group')} for ${String(group?.duration_days ?? '')} days.`,
+        maxTokens: 100,
+      })
+      if (aiCongrats) {
+        await sendMessage(telegramId, aiCongrats).catch(() => {})
+      }
       if (!forceRegenerate) await logEvent({ userId: String(claimed.telegram_id), type: 'access_granted', metadata: { groupId: String(membership.group_id) } })
   } catch (e) {
       await logEvent({ userId: String(claimed.telegram_id), type: 'invite_failed', metadata: { error: String(e?.message || e), groupId: String(membership.group_id) } }).catch(() => {})

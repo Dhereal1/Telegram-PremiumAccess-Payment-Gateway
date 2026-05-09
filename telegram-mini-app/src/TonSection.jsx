@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { TonConnectButton, useTonAddress, useTonConnectUI, useTonWallet } from '@tonconnect/ui-react'
 import { beginCell, toNano } from '@ton/core'
+import AiChat from './components/AiChat.jsx'
 
 function TonSection({ user, tg }) {
   const walletAddress = useTonAddress()
@@ -256,6 +257,8 @@ function TonSection({ user, tg }) {
           </p>
         ) : null}
       </section>
+
+      <AiChat tg={tg} groupId={groupId} />
     </>
   )
 }

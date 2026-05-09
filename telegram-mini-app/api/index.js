@@ -12,6 +12,7 @@ import cronGrantAccess from '../server/handlers/cron/grant-access.js'
 import cronVerifyPayments from '../server/handlers/cron/verify-payments.js'
 import internalRetryFailed from '../server/handlers/internal/retry-failed.js'
 import internalRunWorkers from '../server/handlers/internal/run-workers.js'
+import aiChat from '../server/handlers/ai/chat.js'
 import paymentIntentsCreate from '../server/handlers/payment-intents/create.js'
 import paymentsSubmitTx from '../server/handlers/payments/submit-tx.js'
 import telegramWebhook from '../server/handlers/telegram/webhook.js'
@@ -78,6 +79,9 @@ export default async function handler(req, res) {
 
       case 'POST /payments/submit-tx':
         return paymentsSubmitTx(req, res)
+
+      case 'POST /ai/chat':
+        return aiChat(req, res)
 
       case 'POST /internal/run-workers':
       case 'GET /internal/run-workers':

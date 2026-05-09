@@ -26,7 +26,7 @@ export async function createInviteLink({ chatId, memberLimit = 1, expireSeconds 
   return data.result.invite_link
 }
 
-export async function sendMessage(chatId, text) {
+export async function sendMessage(chatId, text, opts = {}) {
   if (!BOT_TOKEN) throw new Error('Missing BOT_TOKEN')
 
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`
@@ -37,6 +37,8 @@ export async function sendMessage(chatId, text) {
       chat_id: chatId,
       text,
       disable_web_page_preview: true
+      ,
+      ...(opts?.reply_markup ? { reply_markup: opts.reply_markup } : {})
     })
   })
 

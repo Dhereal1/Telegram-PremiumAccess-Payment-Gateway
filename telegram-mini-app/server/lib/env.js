@@ -23,6 +23,10 @@ const EnvSchema = z.object({
 
   // Platform fee
   PLATFORM_FEE_PERCENT: z.string().optional(),
+
+  // Optional AI (Groq)
+  GROQ_API_KEY: z.string().optional(),
+  GROQ_MODEL: z.string().optional(),
 })
 
 export function getEnv() {

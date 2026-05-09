@@ -4,10 +4,12 @@ import { getWorkerLogger } from '../_lib/logger.mjs'
 import { getDb } from '../_lib/db.mjs'
 import { logEvent } from '../../services/subscriptionEvents.service.mjs'
 import { kickChatMember } from '../../services/telegram.service.mjs'
+import { sendMessage } from '../../services/telegram.service.mjs'
 import { logFailedJob } from '../_lib/failedJobs.mjs'
 import { ExpiryJobSchema, parseJob } from '../_lib/jobSchemas.mjs'
 import { getPool } from '../../db/index.mjs'
 import { queryWithRetry } from '../_lib/queryRetry.mjs'
+import { chatComplete } from '../../server/lib/groq.js'
 
 const logger = getWorkerLogger()
 const pool = getDb()
@@ -109,13 +111,103 @@ async function expireMembershipBatch(limit) {
   return expired
 }
 
+async function warnExpiringMembershipBatch(limit) {
+  // Find memberships expiring in 1-3 days that haven't been warned yet.
+  const res = await queryWithRetry(
+    pool,
+    `SELECT m.id, m.telegram_id, m.group_id, m.expiry_date
+     FROM memberships m
+     WHERE m.subscription_status = 'active'
+       AND m.payment_status = true
+       AND m.expiry_date IS NOT NULL
+       AND m.expiry_warning_sent_at IS NULL
+       AND m.expiry_date >= NOW() + INTERVAL '1 day'
+       AND m.expiry_date <  NOW() + INTERVAL '4 days'
+     ORDER BY m.expiry_date ASC
+     LIMIT $1`,
+    [limit],
+  )
+
+  if (!res.rows.length) return 0
+
+  let warned = 0
+  const gp = getPool()
+
+  for (const row of res.rows) {
+    // Claim the warning to avoid duplicates under concurrency.
+    const claim = await queryWithRetry(
+      pool,
+      `UPDATE memberships
+       SET expiry_warning_sent_at = NOW(),
+           updated_at = NOW()
+       WHERE id = $1
+         AND expiry_warning_sent_at IS NULL
+       RETURNING telegram_id, group_id, expiry_date`,
+      [String(row.id)],
+    )
+    if (!claim.rows.length) continue
+
+    const telegramId = claim.rows[0].telegram_id
+    const groupId = claim.rows[0].group_id
+    const expiryDate = new Date(claim.rows[0].expiry_date)
+    const now = Date.now()
+    const daysLeft = Math.max(1, Math.ceil((expiryDate.getTime() - now) / (24 * 60 * 60 * 1000)))
+
+    try {
+      const g = await gp.query('SELECT id, name FROM groups WHERE id=$1', [String(groupId)])
+      const group = g.rows[0]
+      const groupName = group?.name || 'your group'
+
+      const aiWarning = await chatComplete({
+        system: `You are a friendly assistant for \"${groupName}\".\nWrite a short, friendly renewal reminder (2 sentences) for a subscriber whose access expires soon.\nEncourage them to renew. Include the group name.`,
+        user: `Subscription to ${groupName} expires in ${daysLeft} days. Write a renewal reminder.`,
+        maxTokens: 100,
+      })
+
+      const text =
+        aiWarning || `⏰ Your access to ${groupName} expires in ${daysLeft} days. Tap below to renew!`
+
+      const webAppUrl = String(process.env.WEB_APP_URL || '').trim().replace(/\/+$/, '')
+      const reply_markup =
+        webAppUrl && group?.id
+          ? {
+              inline_keyboard: [
+                [
+                  {
+                    text: '🔄 Renew Now',
+                    web_app: { url: `${webAppUrl}/?g=${encodeURIComponent(String(group.id))}` },
+                  },
+                ],
+              ],
+            }
+          : undefined
+
+      await sendMessage(telegramId, text, reply_markup ? { reply_markup } : undefined)
+      warned++
+      await logEvent({ userId: String(telegramId), type: 'expiry_warning_sent', metadata: { groupId: String(groupId), daysLeft } }).catch(() => {})
+    } catch (e) {
+      // Allow retry later if sending fails.
+      await queryWithRetry(
+        pool,
+        `UPDATE memberships SET expiry_warning_sent_at = NULL, updated_at = NOW() WHERE id = $1`,
+        [String(row.id)],
+        { attempts: 2 },
+      ).catch(() => {})
+      logger.warn({ telegramId: String(row.telegram_id), groupId: String(row.group_id), err: String(e?.message || e) }, 'expiry_warning_failed')
+    }
+  }
+
+  return warned
+}
+
 export async function processExpiryJob(job) {
   const { limit } = parseJob(ExpiryJobSchema, job.data || {})
   const batchLimit = Number(limit || 100)
+  const warnedMemberships = await warnExpiringMembershipBatch(batchLimit)
   const expired = await expireBatch(batchLimit)
   const expiredMemberships = await expireMembershipBatch(batchLimit)
-  logger.info({ jobId: job.id, queue: 'expiry', expired, expiredMemberships }, 'expiry_done')
-  return { expired, expiredMemberships }
+  logger.info({ jobId: job.id, queue: 'expiry', warnedMemberships, expired, expiredMemberships }, 'expiry_done')
+  return { warnedMemberships, expired, expiredMemberships }
 }
 
 export async function startExpiryWorker() {
