@@ -20,6 +20,10 @@ function makeMiniAppGroupUrl(webAppUrl, groupId) {
   return `${normalizeWebAppUrl(webAppUrl)}/?g=${encodeURIComponent(String(groupId))}`
 }
 
+function makeMiniAppAdminUrl(webAppUrl) {
+  return `${normalizeWebAppUrl(webAppUrl)}/?admin=1`
+}
+
 function makeBotDeepLink({ botUsername, groupId }) {
   return `https://t.me/${botUsername}?start=${encodeURIComponent(`g_${String(groupId)}`)}`
 }
@@ -200,13 +204,20 @@ export function createBot({ botToken, webAppUrl }) {
         inline_keyboard: [
           [
             {
-              text: '🚀 Open App',
-              web_app: { url: normalizedWebAppUrl },
+              text: '🛠 Admin Dashboard',
+              web_app: { url: makeMiniAppAdminUrl(normalizedWebAppUrl) },
             },
           ],
         ],
       },
     })
+
+    // In strict multi-tenant mode, the subscriber app requires a group-specific link (?g=...).
+    if (ctx.chat?.type === 'private') {
+      await ctx.reply(
+        'To subscribe, use a group subscription link (it opens the Mini App with a group id).',
+      )
+    }
   })
 
   bot.on('callback_query', async (ctx) => {
