@@ -188,7 +188,6 @@ function App() {
           ) : null}
           <p className="subtitle">
             {isTelegram ? 'Running inside Telegram' : 'Open this app from Telegram'}
-            {colorScheme ? ` • ${colorScheme}` : ''}
           </p>
         </div>
       </header>

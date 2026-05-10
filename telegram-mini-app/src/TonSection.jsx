@@ -332,9 +332,6 @@ function TonSection({ user, tg }) {
               <span className="label">Invite link</span>
               <span className="value">{paid ? <span className="status-success">Ready</span> : <span className="status-pending">Pending</span>}</span>
             </div>
-            <a className="inviteLink" href={membership.last_invite_link} target="_blank" rel="noreferrer">
-              {membership.last_invite_link}
-            </a>
             <div className="inviteActions">
               <a
                 className="gradientBtn"
