@@ -47,6 +47,8 @@ function isExactAmountNano(tx, expectedNano) {
 }
 
 async function processJob(job) {
+  const client = await pool.connect()
+  try {
   const { tx } = parseJob(VerifyPaymentJobSchema, job.data || {})
   if (!tx) return { ok: false, reason: 'Missing tx' }
 
@@ -54,7 +56,7 @@ async function processJob(job) {
   if (!txHash) return { ok: false, reason: 'Missing tx hash' }
 
   // Idempotency: payments(tx_hash) is primary key; payment_intents has unique(tx_hash) too.
-  const already = await pool.query('SELECT 1 FROM payments WHERE tx_hash = $1', [String(txHash)])
+  const already = await client.query('SELECT 1 FROM payments WHERE tx_hash = $1', [String(txHash)])
   if (already.rows.length) return { ok: true, status: 'duplicate', txHash }
 
   const comment = parseCommentFromTx(tx) || ''
@@ -62,38 +64,38 @@ async function processJob(job) {
   const intentId = extractPaymentIntentIdFromComment(comment)
   const groupIdFromComment = extractGroupIdFromComment(comment)
   if (!telegramId || !intentId) {
-    await logFraud({ pool, txHash, reason: 'missing_tp_pi', metadata: { comment } })
+    await logFraud({ pool: client, txHash, reason: 'missing_tp_pi', metadata: { comment } })
     return { ok: false, reason: 'Missing tp/pi in comment', txHash }
   }
 
-  const intent = await pool.query(
+  const intent = await client.query(
     `SELECT id, telegram_id, group_id, expected_amount_ton, receiver_address, status, expires_at
      FROM payment_intents
      WHERE id = $1`,
     [String(intentId)],
   )
   if (!intent.rows.length) {
-    await logFraud({ pool, telegramId, paymentIntentId: intentId, txHash, reason: 'intent_not_found', metadata: { comment } })
+    await logFraud({ pool: client, telegramId, paymentIntentId: intentId, txHash, reason: 'intent_not_found', metadata: { comment } })
     return { ok: false, reason: 'Payment intent not found', txHash }
   }
 
   const pi = intent.rows[0]
   if (!pi.group_id) {
-    await logFraud({ pool, telegramId, paymentIntentId: intentId, txHash, reason: 'legacy_intent_no_group', metadata: {} })
+    await logFraud({ pool: client, telegramId, paymentIntentId: intentId, txHash, reason: 'legacy_intent_no_group', metadata: {} })
     return { ok: false, reason: 'Intent is not group-scoped', txHash, telegramId, intentId }
   }
   if (String(pi.telegram_id) !== String(telegramId)) {
-    await logFraud({ pool, telegramId, groupId: pi.group_id, paymentIntentId: intentId, txHash, reason: 'intent_telegram_mismatch', metadata: { comment } })
+    await logFraud({ pool: client, telegramId, groupId: pi.group_id, paymentIntentId: intentId, txHash, reason: 'intent_telegram_mismatch', metadata: { comment } })
     return { ok: false, reason: 'Intent telegram mismatch', txHash }
   }
 
   // Strict group mapping: comment must include matching group id.
   if (!groupIdFromComment) {
-    await logFraud({ pool, telegramId, groupId: pi.group_id, paymentIntentId: intentId, txHash, reason: 'missing_group_in_comment', metadata: { comment } })
+    await logFraud({ pool: client, telegramId, groupId: pi.group_id, paymentIntentId: intentId, txHash, reason: 'missing_group_in_comment', metadata: { comment } })
     return { ok: false, reason: 'Missing group id in comment', txHash }
   }
   if (String(pi.group_id) !== String(groupIdFromComment)) {
-    await logFraud({ pool, telegramId, groupId: pi.group_id, paymentIntentId: intentId, txHash, reason: 'intent_group_mismatch', metadata: { comment } })
+    await logFraud({ pool: client, telegramId, groupId: pi.group_id, paymentIntentId: intentId, txHash, reason: 'intent_group_mismatch', metadata: { comment } })
     return { ok: false, reason: 'Intent group mismatch', txHash }
   }
 
@@ -163,24 +165,24 @@ async function processJob(job) {
 
   const expiresAtMs = pi.expires_at ? new Date(pi.expires_at).getTime() : null
   if (expiresAtMs != null && expiresAtMs < Date.now()) {
-    await pool.query(`UPDATE payment_intents SET status='expired' WHERE id=$1 AND status='pending'`, [String(intentId)])
-    await logFraud({ pool, telegramId, groupId: pi.group_id, paymentIntentId: intentId, txHash, reason: 'intent_expired', metadata: {} })
+    await client.query(`UPDATE payment_intents SET status='expired' WHERE id=$1 AND status='pending'`, [String(intentId)])
+    await logFraud({ pool: client, telegramId, groupId: pi.group_id, paymentIntentId: intentId, txHash, reason: 'intent_expired', metadata: {} })
     return { ok: false, reason: 'Intent expired', txHash, telegramId, intentId }
   }
 
-  await pool.query('BEGIN')
+  await client.query('BEGIN')
   try {
     // Lock intent row
-    const locked = await pool.query(`SELECT status FROM payment_intents WHERE id=$1 FOR UPDATE`, [String(intentId)])
+    const locked = await client.query(`SELECT status FROM payment_intents WHERE id=$1 FOR UPDATE`, [String(intentId)])
     if (!locked.rows.length) throw new Error('Intent disappeared')
     if (locked.rows[0].status !== 'pending') {
-      await pool.query('ROLLBACK')
+      await client.query('ROLLBACK')
       return { ok: true, status: `intent_${locked.rows[0].status}`, txHash, telegramId, intentId }
     }
 
-    await pool.query(`UPDATE payment_intents SET status='paid', tx_hash=$2, paid_at=NOW() WHERE id=$1`, [String(intentId), String(txHash)])
+    await client.query(`UPDATE payment_intents SET status='paid', tx_hash=$2, paid_at=NOW() WHERE id=$1`, [String(intentId), String(txHash)])
 
-    await pool.query(
+    await client.query(
       `INSERT INTO payments (tx_hash, telegram_id, group_id, payment_intent_id, receiver_address, amount_nano, comment, created_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
        ON CONFLICT (tx_hash) DO NOTHING`,
@@ -189,14 +191,14 @@ async function processJob(job) {
 
     // Platform fee + admin earnings (multi-tenant groups only)
     if (pi.group_id) {
-      const g = await pool.query(`SELECT admin_telegram_id FROM groups WHERE id=$1`, [String(pi.group_id)])
+      const g = await client.query(`SELECT admin_telegram_id FROM groups WHERE id=$1`, [String(pi.group_id)])
       const adminId = g.rows[0]?.admin_telegram_id ? String(g.rows[0].admin_telegram_id) : null
       if (adminId) {
         const amountNano = expectedTotalNano
         const platformFeeNano0 = splitEnabled ? platformFeeNano : (amountNano * BigInt(feePctInt)) / 100n
         const adminAmountNano = splitEnabled ? adminExpectedNano : amountNano - platformFeeNano0
 
-        await pool.query(
+        await client.query(
           `INSERT INTO earnings (id, admin_id, group_id, payment_id, total_amount, platform_fee, admin_amount, status, created_at)
            VALUES ($1,$2,$3,$4,$5,$6,$7,'pending',NOW())
            ON CONFLICT (payment_id) DO NOTHING`,
@@ -220,12 +222,12 @@ async function processJob(job) {
     let alreadyGranted = false
 
     // Multi-tenant: update membership (multi-tenant only mode).
-    const gRow = await pool.query(`SELECT duration_days FROM groups WHERE id=$1`, [String(pi.group_id)])
+    const gRow = await client.query(`SELECT duration_days FROM groups WHERE id=$1`, [String(pi.group_id)])
     const durationDays = Number(gRow.rows[0]?.duration_days || 30)
     const safeDurationDays = Number.isFinite(durationDays) && durationDays > 0 ? Math.floor(durationDays) : 30
 
     const membershipId = uuid()
-    const membership = await pool.query(
+    const membership = await client.query(
       `INSERT INTO memberships (id, group_id, telegram_id, subscription_status, last_payment_at, current_period_end, payment_status, expiry_date, updated_at)
        VALUES ($1,$2,$3,'active',NOW(), NOW() + make_interval(days => $4), TRUE, NOW() + make_interval(days => $4), NOW())
        ON CONFLICT (group_id, telegram_id) DO UPDATE SET
@@ -240,15 +242,16 @@ async function processJob(job) {
     )
     enqueueAccessMembershipId = membership.rows[0].id
     enqueueAccessGroupId = String(pi.group_id)
-    alreadyGranted = membership.rows[0].access_granted === true
+    const isRenewal = membership.rows[0].id !== membershipId
+    alreadyGranted = isRenewal ? false : membership.rows[0].access_granted === true
 
-    await pool.query(
+    await client.query(
       `INSERT INTO subscription_events (id, telegram_id, type, metadata, created_at)
        VALUES ($1,$2,'payment_verified',$3,NOW())`,
       [uuid(), String(telegramId), JSON.stringify({ txHash: String(txHash), intentId: String(intentId) })],
     )
 
-    await pool.query('COMMIT')
+    await client.query('COMMIT')
 
     await logEvent({ userId: String(telegramId), type: 'payment_received', metadata: { txHash: String(txHash), paymentIntentId: String(intentId) } }).catch(() => {})
 
@@ -265,8 +268,11 @@ async function processJob(job) {
       enqueueAccessGroupId,
     }
   } catch (e) {
-    await pool.query('ROLLBACK')
+    await client.query('ROLLBACK')
     throw e
+  }
+  } finally {
+    client.release()
   }
 }
 
