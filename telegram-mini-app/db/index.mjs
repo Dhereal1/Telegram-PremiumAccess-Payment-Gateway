@@ -17,6 +17,13 @@ function normalizeDatabaseUrl(urlStr) {
     if (u.protocol !== 'postgres:' && u.protocol !== 'postgresql:') return s
     u.searchParams.delete('sslmode')
     u.searchParams.delete('ssl')
+    // Ensure server-side timestamps are in UTC without needing a per-connection SET TIME ZONE query.
+    // This avoids "client.query() already executing a query" warnings under load.
+    const prev = u.searchParams.get('options') || ''
+    const tzOpt = '-c TimeZone=UTC'
+    if (!prev.includes('TimeZone=UTC')) {
+      u.searchParams.set('options', prev ? `${prev} ${tzOpt}` : tzOpt)
+    }
     return u.toString()
   } catch {
     return s
@@ -35,9 +42,6 @@ export function getPool() {
     max: Number(process.env.PG_POOL_MAX || '2'),
     idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT_MS || '10000'),
     connectionTimeoutMillis: Number(process.env.PG_CONN_TIMEOUT_MS || '10000')
-  })
-  pool.on('connect', (client) => {
-    client.query(`SET TIME ZONE 'UTC'`).catch(() => {})
   })
   return pool
 }
