@@ -18,15 +18,72 @@ function TonSection({ user, tg }) {
   // Multi-tenant only: receiver and price come from the backend intent.
   const receiverAddress = 'UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJKZ'
   const tonPriceTon = 0.1
-  const groupId =
-    new URLSearchParams(window.location.search).get('g') ||
-    new URLSearchParams(window.location.search).get('groupId') ||
-    tg?.initDataUnsafe?.start_param ||
-    null
+  const params = new URLSearchParams(window.location.search)
+  const groupId = params.get('g') || params.get('groupId') || tg?.initDataUnsafe?.start_param || null
 
   // Prefer backend-provided values once an intent is created (prevents UI drift from build-time env).
   const receiverAddressDisplay = activeIntent?.receiverAddress || receiverAddress
   const tonPriceDisplay = Number(activeIntent?.expectedAmountTon ?? tonPriceTon)
+
+  function truncateAddr(addr) {
+    const a = String(addr || '').trim()
+    if (!a) return '—'
+    if (a.length <= 14) return a
+    return `${a.slice(0, 6)}…${a.slice(-4)}`
+  }
+
+  function fmtDate(d) {
+    try {
+      const dt = d ? new Date(d) : null
+      if (!dt || Number.isNaN(dt.getTime())) return null
+      return dt.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+    } catch {
+      return null
+    }
+  }
+
+  function groupDisplayName() {
+    const g = String(params.get('g') || '').trim()
+    const m = g.match(/^([a-z0-9_-]{1,50})_([0-9a-fA-F-]{36})$/i)
+    if (!m) return null
+    const slug = String(m[1] || '')
+      .replace(/[_-]+/g, ' ')
+      .trim()
+    if (!slug) return null
+    return slug.replace(/\b\w/g, (c) => c.toUpperCase())
+  }
+
+  const membership = remoteStatus?.membership || null
+  const hasMembership = Boolean(remoteStatus?.exists && membership)
+  const expiresLabel = membership?.expiry_date ? fmtDate(membership.expiry_date) : remoteStatus?.expiry ? fmtDate(remoteStatus.expiry) : null
+  const subscriptionStatus = String(membership?.subscription_status || '').trim() || (remoteStatus?.paid ? 'active' : 'inactive')
+  const accessGranted = Boolean(remoteStatus?.accessGranted ?? membership?.access_granted)
+  const paid = Boolean(remoteStatus?.paid)
+
+  function chipForStatus(s) {
+    const v = String(s || '').toLowerCase()
+    const cls =
+      v === 'active'
+        ? 'status-success'
+        : v === 'expired'
+          ? 'status-error'
+          : v === 'inactive'
+            ? 'status-info'
+            : 'status-pending'
+    return (
+      <span className={`chip ${cls}`}>
+        <span className="chipDot" />
+        {s}
+      </span>
+    )
+  }
+
+  function payStatusChip() {
+    if (payStatus === 'confirmed') return chipForStatus('confirmed')
+    if (payStatus === 'error') return chipForStatus('error')
+    if (payStatus === 'sent' || payStatus === 'sending' || payStatus === 'timeout') return chipForStatus('pending')
+    return chipForStatus('ready')
+  }
 
   const fetchUserStatus = useCallback(async () => {
     if (!user?.id) return null
@@ -215,6 +272,7 @@ function TonSection({ user, tg }) {
   return (
     <>
       <section className="card">
+        <p className="sectionTitle">Wallet</p>
         <div className="row">
           <span className="label">Wallet</span>
           <span className="value">{walletAddress ? 'Connected' : 'Not connected'}</span>
@@ -224,10 +282,18 @@ function TonSection({ user, tg }) {
           <TonConnectButton />
         </div>
 
-        {walletAddress ? <p className="mono">{walletAddress}</p> : <p className="loading">Connect a TON wallet.</p>}
+        {walletAddress ? (
+          <p className="mono">{truncateAddr(walletAddress)}</p>
+        ) : (
+          <p className="loading status-info">Connect a TON wallet.</p>
+        )}
 
         {walletStatus !== 'idle' ? (
-          <p className="loading">
+          <p
+            className={`loading ${
+              walletStatus === 'saved' ? 'status-success' : walletStatus === 'error' ? 'status-error' : 'status-pending'
+            }`}
+          >
             Wallet save: {walletStatus}
             {walletError ? ` • ${walletError}` : ''}
           </p>
@@ -235,58 +301,113 @@ function TonSection({ user, tg }) {
       </section>
 
       <section className="card">
+        <p className="sectionTitle">{groupDisplayName() ? `Subscription • ${groupDisplayName()}` : 'Subscription'}</p>
+
+        {hasMembership ? (
+          <>
+            <div className="row">
+              <span className="label">Status</span>
+              <span className="value">{chipForStatus(subscriptionStatus || 'active')}</span>
+            </div>
+            <div className="row">
+              <span className="label">Access</span>
+              <span className="value">
+                {accessGranted ? <span className="status-success">✅ Granted</span> : <span className="status-error">❌ Not granted</span>}
+              </span>
+            </div>
+            <div className="row">
+              <span className="label">Expiry</span>
+              <span className="value">{expiresLabel ? `Expires ${expiresLabel}` : '—'}</span>
+            </div>
+          </>
+        ) : remoteStatusError ? (
+          <p className="loading status-error">Status error: {remoteStatusError}</p>
+        ) : (
+          <p className="loading status-info">Checking subscription status…</p>
+        )}
+
+        {membership?.last_invite_link ? (
+          <div className="inviteBox">
+            <div className="row" style={{ paddingTop: 0 }}>
+              <span className="label">Invite link</span>
+              <span className="value">{paid ? <span className="status-success">Ready</span> : <span className="status-pending">Pending</span>}</span>
+            </div>
+            <a className="inviteLink" href={membership.last_invite_link} target="_blank" rel="noreferrer">
+              {membership.last_invite_link}
+            </a>
+            <div className="inviteActions">
+              <a
+                className="gradientBtn"
+                href={membership.last_invite_link}
+                target="_blank"
+                rel="noreferrer"
+                style={{ textAlign: 'center', textDecoration: 'none' }}
+              >
+                Join Group
+              </a>
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="card">
+        <p className="sectionTitle">Payment</p>
         <div className="row">
           <span className="label">Payment</span>
-          <span className="value">{payStatus === 'idle' ? 'Ready' : payStatus}</span>
+          <span className="value">{payStatusChip()}</span>
         </div>
 
         <button
-          className="payBtn"
+          className="gradientBtn"
           onClick={handlePayment}
           disabled={!walletAddress || payStatus === 'sending' || payStatus === 'sent'}
         >
-          {payStatus === 'sending' ? 'Sending…' : activeIntent?.expectedAmountTon ? `Pay ${tonPriceDisplay} TON` : 'Pay'}
+          {payStatus === 'sending' ? 'Sending…' : `Pay ${tonPriceDisplay} TON`}
         </button>
 
-        {activeIntent?.receiverAddress ? (
-          <p className="loading">
-            Receiver: <span className="mono">{receiverAddressDisplay}</span>
+        {payError ? <p className="loading status-error">Error: {payError}</p> : null}
+        {payStatus === 'sent' ? (
+          <p className="loading status-pending" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className="spinner" /> Waiting for confirmation…
           </p>
-        ) : (
-          <p className="loading">Receiver is shown after creating a payment intent.</p>
-        )}
-        {payError ? <p className="loading">Error: {payError}</p> : null}
-        {payStatus === 'sent' ? <p className="loading">Payment request sent. Waiting for confirmation…</p> : null}
-        {payStatus === 'confirmed' ? <p className="loading">Payment confirmed ✅</p> : null}
+        ) : null}
+        {payStatus === 'confirmed' ? (
+          <p className="loading status-success">
+            Payment confirmed <span className="pulseOk">✅</span>
+          </p>
+        ) : null}
         {payStatus === 'timeout' ? (
-          <p className="loading">Still waiting. If you paid, keep this page open and it should confirm shortly.</p>
-        ) : null}
-        {activeIntent?.intentId ? (
-          <p className="loading">
-            Intent: <span className="mono">{activeIntent.intentId}</span>
-          </p>
+          <p className="loading status-pending">Still waiting. If you paid, keep this page open and it should confirm shortly.</p>
         ) : null}
 
-        {remoteStatusError ? <p className="loading">Status error: {remoteStatusError}</p> : null}
-        {remoteStatus?.exists ? (
-          <p className="loading">
-            Access:{' '}
-            <span className="mono">
-              {(groupId ? remoteStatus.membership?.access_granted : remoteStatus.user?.access_granted) ? 'granted' : 'not granted'}
-            </span>
-            {' · '}
-            Paid: <span className="mono">{remoteStatus.paid ? 'true' : 'false'}</span>
-          </p>
-        ) : null}
-
-        {remoteStatus?.membership?.last_invite_link ? (
-          <p className="loading">
-            Invite:{' '}
-            <a href={remoteStatus.membership.last_invite_link} target="_blank" rel="noreferrer">
-              open link
-            </a>
-          </p>
-        ) : null}
+        <details className="details">
+          <summary>Debug info</summary>
+          <div style={{ marginTop: 10 }}>
+            <div className="row">
+              <span className="label">Receiver</span>
+              <span className="value">
+                <span className="mono">{receiverAddressDisplay}</span>
+              </span>
+            </div>
+            {activeIntent?.intentId ? (
+              <div className="row">
+                <span className="label">Intent</span>
+                <span className="value">
+                  <span className="mono">{activeIntent.intentId}</span>
+                </span>
+              </div>
+            ) : null}
+            <div className="row">
+              <span className="label">Paid</span>
+              <span className="value">{paid ? 'true' : 'false'}</span>
+            </div>
+            <div className="row">
+              <span className="label">Access granted</span>
+              <span className="value">{accessGranted ? 'true' : 'false'}</span>
+            </div>
+            {remoteStatusError ? <p className="loading status-error">Status error: {remoteStatusError}</p> : null}
+          </div>
+        </details>
       </section>
 
       <AiChat tg={tg} groupId={groupId} />

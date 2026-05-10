@@ -1,30 +1,15 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
-function Bubble({ role, text }) {
-  const isUser = role === 'user'
-  return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: isUser ? 'flex-end' : 'flex-start',
-        margin: '6px 0',
-      }}
-    >
-      <div
-        style={{
-          maxWidth: '85%',
-          padding: '10px 12px',
-          borderRadius: 12,
-          background: isUser ? 'rgba(0, 122, 255, 0.20)' : 'rgba(255, 255, 255, 0.06)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          whiteSpace: 'pre-wrap',
-          lineHeight: 1.35,
-        }}
-      >
-        {text}
-      </div>
-    </div>
-  )
+function fmtTime(ts) {
+  try {
+    const d = new Date(ts)
+    if (Number.isNaN(d.getTime())) return ''
+    const hh = String(d.getHours()).padStart(2, '0')
+    const mm = String(d.getMinutes()).padStart(2, '0')
+    return `${hh}:${mm}`
+  } catch {
+    return ''
+  }
 }
 
 export default function AiChat({ tg, groupId }) {
@@ -38,6 +23,13 @@ export default function AiChat({ tg, groupId }) {
 
   const canSend = enabled && status !== 'loading' && input.trim().length > 0
   const lastFive = useMemo(() => messages.slice(-10), [messages]) // 5 turns => 10 msgs
+  const listRef = useRef(null)
+
+  useEffect(() => {
+    const el = listRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+  }, [lastFive.length, status])
 
   async function send() {
     const text = input.trim()
@@ -50,7 +42,7 @@ export default function AiChat({ tg, groupId }) {
     setStatus('loading')
     setError(null)
     setInput('')
-    setMessages((m) => [...m, { role: 'user', text }].slice(-10))
+    setMessages((m) => [...m, { role: 'user', text, ts: Date.now() }].slice(-10))
 
     try {
       const resp = await fetch('/api/ai/chat', {
@@ -61,7 +53,7 @@ export default function AiChat({ tg, groupId }) {
       const data = await resp.json().catch(() => null)
       if (!resp.ok) throw new Error(data?.error || `AI request failed (${resp.status})`)
       const reply = String(data?.reply || '').trim() || 'AI assistant is not available right now.'
-      setMessages((m) => [...m, { role: 'assistant', text: reply }].slice(-10))
+      setMessages((m) => [...m, { role: 'assistant', text: reply, ts: Date.now() }].slice(-10))
     } catch (e) {
       setError(String(e?.message || e))
     } finally {
@@ -78,40 +70,71 @@ export default function AiChat({ tg, groupId }) {
         <span className="value">{status === 'loading' ? 'Thinking…' : 'Ready'}</span>
       </div>
 
-      <div style={{ marginTop: 8 }}>
-        {lastFive.length ? (
-          lastFive.map((m, idx) => <Bubble key={idx} role={m.role} text={m.text} />)
-        ) : (
-          <p className="loading">Ask about this group, subscriptions, or TON payments.</p>
-        )}
-      </div>
+      <div className="chatWrap" style={{ marginTop: 8 }}>
+        <div className="chatBody" ref={listRef}>
+          {lastFive.length ? (
+            lastFive.map((m, idx) => {
+              const isUser = m.role === 'user'
+              return (
+                <div key={idx} className={`chatRow ${isUser ? 'chatRowUser' : 'chatRowBot'}`}>
+                  {!isUser ? <div className="botAvatar">🤖</div> : null}
+                  <div className={isUser ? 'bubbleUser' : 'bubbleBot'}>
+                    {m.text}
+                    <div className={`bubbleMeta ${isUser ? '' : 'bubbleMetaLeft'}`}>{fmtTime(m.ts || Date.now())}</div>
+                  </div>
+                </div>
+              )
+            })
+          ) : (
+            <p className="loading status-info">👋 Hi! Ask me anything about your subscription.</p>
+          )}
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          maxLength={500}
-          placeholder="Ask a question…"
-          style={{
-            flex: 1,
-            padding: '10px 12px',
-            borderRadius: 10,
-            border: '1px solid rgba(255,255,255,0.10)',
-            background: 'rgba(255,255,255,0.04)',
-            color: 'inherit',
-            outline: 'none',
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') send()
-          }}
-        />
-        <button className="payBtn" onClick={send} disabled={!canSend}>
-          Send
-        </button>
-      </div>
+          {status === 'loading' ? (
+            <div className="chatRow chatRowBot">
+              <div className="botAvatar">🤖</div>
+              <div className="bubbleBot">
+                <span className="typingDots">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+                <div className="bubbleMeta bubbleMetaLeft">{fmtTime(Date.now())}</div>
+              </div>
+            </div>
+          ) : null}
 
-      {error ? <p className="loading">Error: {error}</p> : null}
+          {error ? (
+            <div className="chatRow chatRowBot">
+              <div className="botAvatar">⚠️</div>
+              <div className="bubbleBot" style={{ borderColor: 'rgba(248, 113, 113, 0.35)' }}>
+                <span className="status-error">Error: {error}</span>
+                <div className="bubbleMeta bubbleMetaLeft">{fmtTime(Date.now())}</div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="chatComposer">
+          <div className="chatInputWrap">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              maxLength={500}
+              placeholder="Ask a question…"
+              className="chatInput"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') send()
+              }}
+            />
+            <div className="counter">
+              {input.length}/500
+            </div>
+          </div>
+          <button className="iconBtn" onClick={send} disabled={!canSend} aria-label="Send">
+            ➤
+          </button>
+        </div>
+      </div>
     </section>
   )
 }
-

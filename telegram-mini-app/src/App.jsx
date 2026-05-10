@@ -128,33 +128,108 @@ function App() {
     }
   }, [isAdminView])
 
+  const welcomeName = tgUser?.first_name || tgUser?.username || 'there'
+
+  const groupLabel = useMemo(() => {
+    try {
+      const p = new URLSearchParams(window.location.search)
+      const g = String(p.get('g') || '').trim()
+      const m = g.match(/^([a-z0-9_-]{1,50})_([0-9a-fA-F-]{36})$/i)
+      if (!m) return null
+      const slug = String(m[1] || '')
+        .replace(/[_-]+/g, ' ')
+        .trim()
+      if (!slug) return null
+      return slug.replace(/\b\w/g, (c) => c.toUpperCase())
+    } catch {
+      return null
+    }
+  }, [])
+
+  const authChip = useMemo(() => {
+    const label =
+      authStatus === 'ok'
+        ? 'Authenticated'
+        : authStatus === 'error'
+          ? 'Auth error'
+          : authStatus === 'loading'
+            ? 'Authenticating'
+            : 'Auth idle'
+    const cls =
+      authStatus === 'ok'
+        ? 'status-success'
+        : authStatus === 'error'
+          ? 'status-error'
+          : authStatus === 'loading'
+            ? 'status-pending'
+            : 'status-info'
+    return (
+      <span className={`chip ${cls}`}>
+        <span className="chipDot" />
+        {label}
+      </span>
+    )
+  }, [authStatus])
+
   return (
     <div className="app">
       <header className="header">
-        <h1 className="title">TON Premium App</h1>
-        <p className="subtitle">
-          {isTelegram ? 'Running inside Telegram' : 'Open this app from Telegram'}
-          {colorScheme ? ` • ${colorScheme}` : ''}
-        </p>
+        <div className="card hero">
+          <h1 className="heroTitle">
+            <span className="gradientText">💎 TON Premium</span>
+          </h1>
+          {groupLabel ? (
+            <div style={{ marginTop: 8 }}>
+              <span className="chip status-info">
+                <span className="chipDot" />
+                {groupLabel}
+              </span>
+            </div>
+          ) : null}
+          <p className="subtitle">
+            {isTelegram ? 'Running inside Telegram' : 'Open this app from Telegram'}
+            {colorScheme ? ` • ${colorScheme}` : ''}
+          </p>
+        </div>
       </header>
 
       <main className="card">
         {tgUser ? (
           <>
+            <p className="loading" style={{ marginBottom: 10 }}>
+              Welcome, <strong>{welcomeName}</strong>!
+            </p>
+
             <div className="row">
-              <span className="label">Telegram user ID</span>
-              <span className="value">{tgUser.id}</span>
+              <span className="label">Status</span>
+              <span className="value">{authChip}</span>
             </div>
-            <div className="row">
-              <span className="label">Username</span>
-              <span className="value">{tgUser.username ? `@${tgUser.username}` : '—'}</span>
-            </div>
+
+            <details className="details">
+              <summary>Debug info</summary>
+              <div style={{ marginTop: 10 }}>
+                <div className="row">
+                  <span className="label">Telegram user ID</span>
+                  <span className="value">{tgUser.id}</span>
+                </div>
+                <div className="row">
+                  <span className="label">Username</span>
+                  <span className="value">{tgUser.username ? `@${tgUser.username}` : '—'}</span>
+                </div>
+                {dbUser?.telegram_id ? (
+                  <div className="row">
+                    <span className="label">DB telegram_id</span>
+                    <span className="value">{dbUser.telegram_id}</span>
+                  </div>
+                ) : null}
+              </div>
+            </details>
           </>
         ) : (
           <p className="loading">
             {isTelegram
               ? 'Loading Telegram user...'
-              : 'No Telegram context detected. Launch via the bot “Open App” button.'}
+              : 'No Telegram context detected. Launch via the bot "Open App" button.'}
           </p>
         )}
       </main>
