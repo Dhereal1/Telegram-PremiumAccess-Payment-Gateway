@@ -8,29 +8,44 @@ let pool;
 // node-postgres otherwise interprets it as local time, causing expiry comparisons to drift by TZ offset.
 pg.types.setTypeParser(1114, (str) => new Date(`${str}Z`));
 
-function normalizeDatabaseUrl(urlStr) {
+function poolConfigFromDatabaseUrl(urlStr) {
   const s = String(urlStr || '').trim();
-  if (!s) return s;
-  try {
-    const u = new URL(s);
-    if (u.protocol !== 'postgres:' && u.protocol !== 'postgresql:') return s;
-    const prev = u.searchParams.get('options') || '';
-    const tzOpt = '-c TimeZone=UTC';
-    if (!prev.includes('TimeZone=UTC')) {
-      u.searchParams.set('options', prev ? `${prev} ${tzOpt}` : tzOpt);
-    }
-    return u.toString();
-  } catch {
-    return s;
-  }
+  if (!s) throw new Error('Missing DATABASE_URL');
+
+  const u = new URL(s);
+  if (u.protocol !== 'postgres:' && u.protocol !== 'postgresql:') throw new Error('Invalid DATABASE_URL protocol');
+
+  const user = decodeURIComponent(u.username || '');
+  const password = decodeURIComponent(u.password || '');
+  const host = u.hostname;
+  const port = u.port ? Number(u.port) : undefined;
+  const database = u.pathname ? u.pathname.replace(/^\//, '') : undefined;
+
+  const sslmode = String(u.searchParams.get('sslmode') || '').toLowerCase();
+  const sslFlag = String(u.searchParams.get('ssl') || '').toLowerCase();
+  const sslDisabled = sslmode === 'disable' || sslFlag === '0' || sslFlag === 'false';
+  const ssl = sslDisabled ? false : { rejectUnauthorized: false };
+
+  const prevOptions = u.searchParams.get('options') || '';
+  const tzOpt = '-c TimeZone=UTC';
+  const options = prevOptions.includes('TimeZone=UTC') ? prevOptions : prevOptions ? `${prevOptions} ${tzOpt}` : tzOpt;
+
+  return {
+    host,
+    port,
+    user: user || undefined,
+    password: password || undefined,
+    database: database || undefined,
+    ssl,
+    options,
+  };
 }
 
 export function getDb() {
   if (pool) return pool;
   const env = getWorkerEnv();
   pool = new Pool({
-    connectionString: normalizeDatabaseUrl(env.DATABASE_URL),
-    ssl: { rejectUnauthorized: false },
+    ...poolConfigFromDatabaseUrl(env.DATABASE_URL),
     max: 2,
     idleTimeoutMillis: 10000,
     connectionTimeoutMillis: 10000,

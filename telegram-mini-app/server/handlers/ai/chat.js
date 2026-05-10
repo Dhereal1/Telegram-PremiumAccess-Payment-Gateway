@@ -64,6 +64,10 @@ export default async function handler(req, res) {
   const group = g.rows[0]
   if (!group) return res.status(404).json({ error: 'Group not found' })
 
+  if (!String(process.env.GROQ_API_KEY || '').trim()) {
+    return res.json({ reply: 'AI is not configured right now.' })
+  }
+
   const admin = await pool.query('SELECT telegram_id, wallet_address, wallet_verified_at FROM admins WHERE telegram_id=$1', [
     String(group.admin_telegram_id),
   ])

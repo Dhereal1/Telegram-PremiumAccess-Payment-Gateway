@@ -7,26 +7,38 @@ let pool
 // node-postgres otherwise interprets it as local time, causing expiry comparisons to drift by TZ offset.
 pg.types.setTypeParser(1114, (str) => new Date(`${str}Z`))
 
-function normalizeDatabaseUrl(urlStr) {
+function poolConfigFromDatabaseUrl(urlStr, { rejectUnauthorized }) {
   const s = String(urlStr || '').trim()
-  if (!s) return s
-  // Avoid pg-connection-string sslmode warnings by stripping sslmode from URL query.
-  // SSL behavior is controlled explicitly via the `ssl` Pool option below.
-  try {
-    const u = new URL(s)
-    if (u.protocol !== 'postgres:' && u.protocol !== 'postgresql:') return s
-    u.searchParams.delete('sslmode')
-    u.searchParams.delete('ssl')
-    // Ensure server-side timestamps are in UTC without needing a per-connection SET TIME ZONE query.
-    // This avoids "client.query() already executing a query" warnings under load.
-    const prev = u.searchParams.get('options') || ''
-    const tzOpt = '-c TimeZone=UTC'
-    if (!prev.includes('TimeZone=UTC')) {
-      u.searchParams.set('options', prev ? `${prev} ${tzOpt}` : tzOpt)
-    }
-    return u.toString()
-  } catch {
-    return s
+  if (!s) throw new Error('Missing DATABASE_URL')
+
+  const u = new URL(s)
+  if (u.protocol !== 'postgres:' && u.protocol !== 'postgresql:') throw new Error('Invalid DATABASE_URL protocol')
+
+  const user = decodeURIComponent(u.username || '')
+  const password = decodeURIComponent(u.password || '')
+  const host = u.hostname
+  const port = u.port ? Number(u.port) : undefined
+  const database = u.pathname ? u.pathname.replace(/^\//, '') : undefined
+
+  // Respect explicit disable flags if present (useful for local dev DBs).
+  const sslmode = String(u.searchParams.get('sslmode') || '').toLowerCase()
+  const sslFlag = String(u.searchParams.get('ssl') || '').toLowerCase()
+  const sslDisabled = sslmode === 'disable' || sslFlag === '0' || sslFlag === 'false'
+  const ssl = sslDisabled ? false : { rejectUnauthorized }
+
+  // Force server TZ to UTC (avoids app-side drift + removes need for a connect hook query).
+  const prevOptions = u.searchParams.get('options') || ''
+  const tzOpt = '-c TimeZone=UTC'
+  const options = prevOptions.includes('TimeZone=UTC') ? prevOptions : prevOptions ? `${prevOptions} ${tzOpt}` : tzOpt
+
+  return {
+    host,
+    port,
+    user: user || undefined,
+    password: password || undefined,
+    database: database || undefined,
+    ssl,
+    options,
   }
 }
 
@@ -37,8 +49,7 @@ export function getPool() {
   const rejectUnauthorized = String(process.env.PG_SSL_REJECT_UNAUTHORIZED || '').toLowerCase() === 'true'
 
   pool = new Pool({
-    connectionString: normalizeDatabaseUrl(process.env.DATABASE_URL),
-    ssl: { rejectUnauthorized },
+    ...poolConfigFromDatabaseUrl(process.env.DATABASE_URL, { rejectUnauthorized }),
     max: Number(process.env.PG_POOL_MAX || '2'),
     idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT_MS || '10000'),
     connectionTimeoutMillis: Number(process.env.PG_CONN_TIMEOUT_MS || '10000')
