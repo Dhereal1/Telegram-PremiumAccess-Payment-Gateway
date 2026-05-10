@@ -36,8 +36,12 @@ export default async function handler(req, res) {
     [String(groupId), String(telegramId)],
   )
   const membership = m.rows[0] || null
-  if (!membership) return res.json({ exists: false, groupId: String(groupId) })
+  if (!membership) {
+    res.setHeader('Cache-Control', 'no-store')
+    return res.json({ exists: false, groupId: String(groupId) })
+  }
 
+  res.setHeader('Cache-Control', 'no-store')
   return res.json({
     exists: true,
     groupId: String(groupId),

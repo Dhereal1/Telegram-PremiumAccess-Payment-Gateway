@@ -44,6 +44,7 @@ export default async function handler(req, res) {
     [String(tgUser.id)],
   )
 
+  res.setHeader('Cache-Control', 'no-store')
   return res.json(
     r.rows.map((x) => ({
       id: x.id,

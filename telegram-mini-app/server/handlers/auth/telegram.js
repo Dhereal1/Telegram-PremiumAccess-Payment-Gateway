@@ -46,5 +46,6 @@ export default async function handler(req, res) {
     return res.status(503).json({ error: 'Database temporarily unavailable. Please retry.' })
   }
 
+  res.setHeader('Cache-Control', 'no-store')
   return res.json({ user: result.rows[0] })
 }

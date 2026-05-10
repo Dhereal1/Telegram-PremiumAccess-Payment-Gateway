@@ -27,5 +27,6 @@ export default async function handler(req, res) {
   if (!tgUser?.id) return res.status(400).json({ error: 'Missing Telegram user' })
 
   const result = await getAdminEarnings({ adminId: String(tgUser.id), limit: 50 })
+  res.setHeader('Cache-Control', 'no-store')
   return res.json(result)
 }

@@ -34,6 +34,7 @@ export default async function handler(req, res) {
     [String(tgUser.id)],
   )
   const admin = r.rows[0] || null
+  res.setHeader('Cache-Control', 'no-store')
   return res.json({
     ok: true,
     admin: admin
@@ -46,4 +47,3 @@ export default async function handler(req, res) {
       : null,
   })
 }
-

@@ -24,5 +24,6 @@ export default async function handler(req, res) {
   if (!tgUser?.id) return res.status(400).json({ error: 'Missing Telegram user' })
 
   const groups = await listGroupsByAdmin(String(tgUser.id))
+  res.setHeader('Cache-Control', 'no-store')
   return res.json({ ok: true, groups })
 }

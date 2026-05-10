@@ -43,6 +43,7 @@ export default async function handler(req, res) {
     [String(groupId)],
   )
 
+  res.setHeader('Cache-Control', 'no-store')
   return res.json(
     m.rows.map((x) => ({
       telegram_id: x.telegram_id,

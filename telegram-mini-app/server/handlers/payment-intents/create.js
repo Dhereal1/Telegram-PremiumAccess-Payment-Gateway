@@ -125,6 +125,7 @@ export default async function handler(req, res) {
     }
 
     log.info({ requestId, intentId, telegramId: String(tgUser.id) }, 'payment_intent_created')
+    res.setHeader('Cache-Control', 'no-store')
     return res.json({
       intentId,
       expectedAmountTon: expectedTon,

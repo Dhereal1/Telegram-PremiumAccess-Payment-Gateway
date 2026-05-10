@@ -32,6 +32,6 @@ export default async function handler(req, res) {
     [String(tgUser.id), String(walletAddress).trim()],
   )
 
+  res.setHeader('Cache-Control', 'no-store')
   return res.json({ ok: true, walletAddress: String(walletAddress).trim() })
 }
-
