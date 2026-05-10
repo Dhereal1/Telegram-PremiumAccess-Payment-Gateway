@@ -14,8 +14,6 @@ function TonSection({ user, tg }) {
   const [activeIntent, setActiveIntent] = useState(null)
   const [remoteStatus, setRemoteStatus] = useState(null)
   const [remoteStatusError, setRemoteStatusError] = useState(null)
-  const [regenStatus, setRegenStatus] = useState('idle')
-  const [regenError, setRegenError] = useState(null)
 
   const params = new URLSearchParams(window.location.search)
   const groupId = params.get('g') || params.get('groupId') || tg?.initDataUnsafe?.start_param || null
@@ -272,36 +270,6 @@ function TonSection({ user, tg }) {
     }
   }
 
-  const handleRegenerateInvite = async () => {
-    if (!tg?.initData) {
-      setRegenStatus('error')
-      setRegenError('Open this Mini App from Telegram (via the bot).')
-      return
-    }
-    if (!groupId) {
-      setRegenStatus('error')
-      setRegenError('Missing group id.')
-      return
-    }
-    try {
-      setRegenStatus('loading')
-      setRegenError(null)
-      const resp = await fetch('/api/user/regenerate-invite', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg.initData, groupId: String(groupId) }),
-      })
-      const data = await resp.json().catch(() => null)
-      if (!resp.ok) throw new Error(data?.error || `Regenerate failed (${resp.status})`)
-      await fetchUserStatus()
-      setRegenStatus('done')
-      setTimeout(() => setRegenStatus('idle'), 2000)
-    } catch (e) {
-      setRegenStatus('error')
-      setRegenError(String(e?.message || e))
-    }
-  }
-
   return (
     <>
       <section className="card">
@@ -375,13 +343,7 @@ function TonSection({ user, tg }) {
               >
                 Join Group
               </a>
-              {accessGranted && membership?.last_invite_link ? (
-                <button className="gradientBtn" onClick={handleRegenerateInvite} disabled={regenStatus === 'loading'}>
-                  {regenStatus === 'loading' ? 'Regenerating…' : '🔄 Regenerate Invite'}
-                </button>
-              ) : null}
             </div>
-            {regenStatus === 'error' && regenError ? <p className="loading status-error">Invite: {regenError}</p> : null}
           </div>
         ) : null}
       </section>

@@ -23,6 +23,22 @@ export async function createInviteLink({ chatId, memberLimit = 1, expireSeconds 
   return data.result.invite_link
 }
 
+export async function revokeInviteLink({ chatId, inviteLink } = {}) {
+  const BOT_TOKEN = process.env.BOT_TOKEN
+  if (!BOT_TOKEN) throw new Error('Missing BOT_TOKEN')
+  if (!chatId || !inviteLink) return
+
+  const url = `https://api.telegram.org/bot${BOT_TOKEN}/revokeChatInviteLink`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, invite_link: inviteLink }),
+  })
+
+  const data = await res.json().catch(() => null)
+  return data
+}
+
 export async function sendMessage(chatId, text, opts = {}) {
   const BOT_TOKEN = process.env.BOT_TOKEN
   if (!BOT_TOKEN) throw new Error('Missing BOT_TOKEN')

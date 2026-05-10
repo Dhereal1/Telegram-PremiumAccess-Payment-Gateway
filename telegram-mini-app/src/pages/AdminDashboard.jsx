@@ -261,6 +261,9 @@ function AdminDashboard({ tg }) {
             Your Premium Groups
           </div>
           <div className="loading">Groups are created via the bot onboarding flow. Use this dashboard to manage and share links.</div>
+          <div className="loading" style={{ marginTop: 6 }}>
+            To regenerate a subscriber's invite link, use the bot: <span className="mono">/regen_invite</span>
+          </div>
         </div>
       </div>
 
@@ -302,11 +305,14 @@ function AdminDashboard({ tg }) {
 
                 <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                   <button className="payBtn" onClick={() => window.open(link, '_blank', 'noopener,noreferrer')}>
-                    Open Link
+                    🔗 Share Payment Link
                   </button>
                   <button className="payBtn" onClick={() => copy(link)}>
-                    Copy Link
+                    📋 Copy Payment Link
                   </button>
+                </div>
+                <div className="loading" style={{ marginTop: 8 }}>
+                  Share this link with potential subscribers
                 </div>
               </div>
             )
