@@ -6,7 +6,7 @@ import { getLogger } from './lib/log.js'
 import { getPool } from './lib/db.js'
 import { getAdminByTelegramId, createGroupIfNotExists, upsertAdminWallet } from './lib/groups.js'
 import { deleteOnboardingSession, getOnboardingSession, upsertOnboardingSession } from './lib/onboarding-sessions.js'
-import { getTransactions, normalizeTonAddress, parseCommentFromTx, toFriendlyAddress } from './lib/toncenter.js'
+import { getTransactions, normalizeTonAddress, parseCommentFromTx } from './lib/toncenter.js'
 
 const log = getLogger()
 
@@ -450,33 +450,23 @@ export function createBot({ botToken, webAppUrl }) {
       const admin = await getAdminByTelegramId(adminId)
       if (!admin) {
         await upsertOnboardingSession({ adminId, telegramChatId, step: 'awaiting_wallet', collectedData: data })
-        await ctx.reply('💳 Enter your TON payout wallet address (this will be used for all your groups):')
+        await ctx.reply('💼 Connect your TON wallet in the Admin Dashboard to receive payments.\n\nTap below to open your dashboard and connect your wallet.', {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: '💼 Connect Wallet',
+                  web_app: { url: makeMiniAppAdminUrl(normalizedWebAppUrl) },
+                },
+              ],
+            ],
+          },
+        })
+        await ctx.reply('Once your wallet is saved, send any message here to continue.')
         return
       }
 
-      if (!admin.wallet_verified_at) {
-        // Require wallet verification before creating groups.
-        const nonce = crypto.randomUUID().replace(/-/g, '').slice(0, 12)
-        data.wallet_address = admin.wallet_address
-        data.wallet_verification_nonce = nonce
-
-        await getPool().query(
-          `UPDATE admins
-           SET wallet_verification_nonce=$2, wallet_verification_requested_at=NOW()
-           WHERE telegram_id=$1`,
-          [String(adminId), String(nonce)],
-        )
-
-        await upsertOnboardingSession({ adminId, telegramChatId, step: 'awaiting_wallet_verification', collectedData: data })
-
-        const platformWallet = String(process.env.PLATFORM_WALLET_ADDRESS || '').trim()
-        const comment = `verify_admin:${adminId}:${nonce}`
-        await ctx.reply(
-          `🔐 Wallet verification required.\n\nSend at least 0.001 TON to:\n${platformWallet}\nWith comment:\n${comment}\n\nThen tap the button below.`,
-          { reply_markup: { inline_keyboard: [[{ text: '✅ I sent it', callback_data: verifyCallbackData(telegramChatId) }]] } },
-        )
-        return
-      }
+      // Wallet verification is handled asynchronously in the Admin Dashboard (TonConnect).
 
       const groupId = crypto.randomUUID()
       const group = await createGroupIfNotExists({
@@ -501,39 +491,47 @@ export function createBot({ botToken, webAppUrl }) {
     }
 
     if (step === 'awaiting_wallet') {
-      const walletRaw = String(inputText).trim()
-      const raw = normalizeTonAddress(walletRaw)
-      if (!raw) {
-        await ctx.reply('That does not look like a valid TON address. Please paste a valid wallet address (starts with EQ…/UQ…).')
+      const admin = await getAdminByTelegramId(adminId)
+      if (!admin?.wallet_address) {
+        await ctx.reply('💼 Connect your TON wallet in the Admin Dashboard to receive payments.\n\nTap below to open your dashboard and connect your wallet.', {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: '💼 Connect Wallet',
+                  web_app: { url: makeMiniAppAdminUrl(normalizedWebAppUrl) },
+                },
+              ],
+            ],
+          },
+        })
         return
       }
 
-      const friendly = toFriendlyAddress(walletRaw)
-      const walletToStore = friendly || raw
-      await upsertAdminWallet({ adminTelegramId: adminId, walletAddress: walletToStore })
+      // Wallet is now configured; proceed to create the group from collected onboarding data.
+      if (!data?.name || !data?.price_ton || !data?.duration_days) {
+        await ctx.reply('Setup state is missing. Please restart setup from the group "Setup Group" button.')
+        return
+      }
 
-      // Request proof-of-control via tiny transfer to platform wallet.
-      const nonce = crypto.randomUUID().replace(/-/g, '').slice(0, 12)
-      data.wallet_address = walletToStore
-      data.wallet_verification_nonce = nonce
+      const groupId = crypto.randomUUID()
+      const group = await createGroupIfNotExists({
+        id: groupId,
+        telegramChatId: telegramChatId,
+        adminTelegramId: adminId,
+        name: String(data.name).slice(0, 120),
+        priceTon: data.price_ton,
+        durationDays: data.duration_days,
+      })
 
-      await getPool().query(
-        `UPDATE admins
-         SET wallet_verified_at=NULL,
-             wallet_verification_nonce=$2,
-             wallet_verification_requested_at=NOW()
-         WHERE telegram_id=$1`,
-        [String(adminId), String(nonce)],
-      )
+      await deleteOnboardingSession({ adminId, telegramChatId })
+      const botUsername = await getBotUsername()
+      const deepLink = botUsername
+        ? `https://t.me/${botUsername}?start=${encodeURIComponent(`g_${slugifyGroupName(group.name)}_${String(group.id)}`)}`
+        : makeMiniAppGroupUrl(normalizedWebAppUrl, group.id)
 
-      await upsertOnboardingSession({ adminId, telegramChatId, step: 'awaiting_wallet_verification', collectedData: data })
-
-      const platformWallet = String(process.env.PLATFORM_WALLET_ADDRESS || '').trim()
-      const comment = `verify_admin:${adminId}:${nonce}`
-      await ctx.reply(
-        `🔐 Verify your wallet.\n\nSend at least 0.001 TON to:\n${platformWallet}\nWith comment:\n${comment}\n\nThen tap the button below.`,
-        { reply_markup: { inline_keyboard: [[{ text: '✅ I sent it', callback_data: verifyCallbackData(telegramChatId) }]] } },
-      )
+      const messageText = `✅ Your premium group is ready!\n\n🔗 Subscription link for <b>${escapeHtml(group.name)}</b>:\n<a href="${escapeHtml(deepLink)}">${escapeHtml(group.name)}</a>\n\nShare this with your audience to start earning.`
+      await ctx.reply(messageText, { parse_mode: 'HTML', disable_web_page_preview: true })
       return
     }
   })

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { TonConnectButton, useTonAddress } from '@tonconnect/ui-react'
 
 function buildGroupLink({ origin, groupId }) {
   const url = new URL(origin)
@@ -10,13 +11,26 @@ function AdminDashboard({ tg }) {
   const initData = tg?.initData || ''
   const origin = useMemo(() => window.location.origin + '/', [])
 
+  const walletAddress = useTonAddress(false)
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [groups, setGroups] = useState([])
   const [earnings, setEarnings] = useState(null)
   const [withdrawing, setWithdrawing] = useState(false)
 
+  const [profile, setProfile] = useState(null)
+  const [walletSaveStatus, setWalletSaveStatus] = useState('idle') // idle|saving|saved|error
+  const [walletSaveError, setWalletSaveError] = useState(null)
+
   const [toast, setToast] = useState(null)
+
+  function truncateAddr(addr) {
+    const a = String(addr || '').trim()
+    if (!a) return '—'
+    if (a.length <= 14) return a
+    return `${a.slice(0, 6)}…${a.slice(-4)}`
+  }
 
   useEffect(() => {
     if (!initData) return
@@ -26,9 +40,10 @@ function AdminDashboard({ tg }) {
       try {
         setLoading(true)
         setError(null)
-        const [groupsResp, earningsResp] = await Promise.all([
+        const [groupsResp, earningsResp, profileResp] = await Promise.all([
           fetch('/api/admin/groups/full', { method: 'GET', headers: { 'x-telegram-init-data': initData } }),
           fetch('/api/admin/earnings', { method: 'GET', headers: { 'x-telegram-init-data': initData } }),
+          fetch('/api/admin/profile', { method: 'GET', headers: { 'x-telegram-init-data': initData } }),
         ])
 
         const groupsData = await groupsResp.json().catch(() => null)
@@ -37,6 +52,11 @@ function AdminDashboard({ tg }) {
         const earningsData = await earningsResp.json().catch(() => null)
         if (earningsResp.ok) {
           if (!cancelled) setEarnings(earningsData || null)
+        }
+
+        const profileData = await profileResp.json().catch(() => null)
+        if (profileResp.ok) {
+          if (!cancelled) setProfile(profileData || null)
         }
 
         if (!cancelled) setGroups(Array.isArray(groupsData) ? groupsData : [])
@@ -52,6 +72,16 @@ function AdminDashboard({ tg }) {
       cancelled = true
     }
   }, [initData])
+
+  async function refreshProfile() {
+    const resp = await fetch('/api/admin/profile', {
+      method: 'GET',
+      headers: { 'x-telegram-init-data': initData },
+    })
+    const data = await resp.json().catch(() => null)
+    if (!resp.ok) throw new Error(data?.error || `Load failed (${resp.status})`)
+    setProfile(data || null)
+  }
 
   async function refreshGroups() {
     const resp = await fetch('/api/admin/groups/full', {
@@ -105,8 +135,88 @@ function AdminDashboard({ tg }) {
     }
   }
 
+  async function saveWallet() {
+    if (!initData) return
+    if (!walletAddress) {
+      setToast('Connect a wallet first')
+      setTimeout(() => setToast(null), 1500)
+      return
+    }
+
+    try {
+      setWalletSaveStatus('saving')
+      setWalletSaveError(null)
+
+      const resp = await fetch('/api/admin/wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData, walletAddress }),
+      })
+      const data = await resp.json().catch(() => null)
+      if (!resp.ok) throw new Error(data?.error || `Save failed (${resp.status})`)
+
+      setWalletSaveStatus('saved')
+      setToast('✅ Wallet saved and verified!')
+      setTimeout(() => setToast(null), 2000)
+      await refreshProfile()
+    } catch (e) {
+      setWalletSaveStatus('error')
+      setWalletSaveError(String(e?.message || e))
+      setToast(String(e?.message || e))
+      setTimeout(() => setToast(null), 2500)
+    }
+  }
+
   return (
     <section className="card" style={{ display: 'grid', gap: 12 }}>
+      <section className="card">
+        <p className="sectionTitle">Wallet</p>
+        <div className="row">
+          <span className="label">Connected wallet</span>
+          <span className="value">{walletAddress ? truncateAddr(walletAddress) : 'Not connected'}</span>
+        </div>
+
+        <div className="walletActions">
+          <TonConnectButton />
+        </div>
+
+        {profile?.admin?.wallet_address ? (
+          <div className="row" style={{ marginTop: 10 }}>
+            <span className="label">Saved wallet</span>
+            <span className="value" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span className="mono">{truncateAddr(profile.admin.wallet_address)}</span>
+              {profile?.admin?.wallet_verified ? (
+                <span className="chip status-success">
+                  <span className="chipDot" />
+                  ✅ Verified
+                </span>
+              ) : (
+                <span className="chip status-pending">
+                  <span className="chipDot" />
+                  Pending
+                </span>
+              )}
+            </span>
+          </div>
+        ) : (
+          <p className="loading status-info" style={{ marginTop: 10 }}>
+            No wallet saved yet. Connect a wallet and save it to receive payments.
+          </p>
+        )}
+
+        <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
+          <button className="gradientBtn" onClick={saveWallet} disabled={!walletAddress || walletSaveStatus === 'saving'}>
+            {walletSaveStatus === 'saving' ? 'Saving…' : 'Save Wallet'}
+          </button>
+          {walletSaveStatus !== 'idle' ? (
+            <div className={`loading ${walletSaveStatus === 'saved' ? 'status-success' : walletSaveStatus === 'error' ? 'status-error' : 'status-pending'}`}>
+              Save status: {walletSaveStatus}
+              {walletSaveError ? ` • ${walletSaveError}` : ''}
+            </div>
+          ) : null}
+        </div>
+      </section>
+
       <section className="card">
         <div className="row" style={{ alignItems: 'center' }}>
           <div>
