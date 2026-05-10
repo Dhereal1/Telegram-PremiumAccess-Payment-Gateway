@@ -2,6 +2,7 @@ import { expiryQueue } from '../queues/expiryQueue.mjs'
 import { getWorkerLogger } from '../_lib/logger.mjs'
 
 const logger = getWorkerLogger()
+let running = true
 
 async function tick() {
   // BullMQ does not allow ':' in custom job ids.
@@ -23,7 +24,7 @@ async function tick() {
 async function main() {
   const intervalMs = Number(process.env.EXPIRY_SCHEDULER_INTERVAL_MS || '60000')
   logger.info({ intervalMs }, 'expiryScheduler started')
-  while (true) {
+  while (running) {
     try {
       await tick()
     } catch (e) {
@@ -33,4 +34,17 @@ async function main() {
   }
 }
 
-main()
+const p = main()
+async function shutdown(signal) {
+  running = false
+  logger.info({ signal }, 'worker_shutdown_start')
+  setTimeout(() => process.exit(0), 10_000).unref?.()
+  try {
+    await p
+  } catch {
+    // ignore
+  }
+  process.exit(0)
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'))
+process.on('SIGINT', () => shutdown('SIGINT'))

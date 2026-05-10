@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'node:url';
+import { getWorkerLogger } from './logger.mjs';
 
 // Load local env when running workers on a laptop/VM.
 // This is a no-op in environments where vars are already provided (dotenv does not override by default).
@@ -36,5 +37,15 @@ export function getWorkerEnv() {
     const msg = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
     throw new Error(`Invalid worker env: ${msg}`);
   }
+  const logger = getWorkerLogger();
+  logger.info(
+    {
+      hasGroqKey: Boolean(parsed.data.GROQ_API_KEY),
+      hasRedisUrl: Boolean(parsed.data.REDIS_URL),
+      hasPlatformWallet: Boolean(parsed.data.PLATFORM_WALLET_ADDRESS),
+      hasTonApiKey: Boolean(parsed.data.TON_API_KEY),
+    },
+    'worker_env_check',
+  );
   return parsed.data;
 }

@@ -14,16 +14,15 @@ function TonSection({ user, tg }) {
   const [activeIntent, setActiveIntent] = useState(null)
   const [remoteStatus, setRemoteStatus] = useState(null)
   const [remoteStatusError, setRemoteStatusError] = useState(null)
+  const [regenStatus, setRegenStatus] = useState('idle')
+  const [regenError, setRegenError] = useState(null)
 
-  // Multi-tenant only: receiver and price come from the backend intent.
-  const receiverAddress = 'UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJKZ'
-  const tonPriceTon = 0.1
   const params = new URLSearchParams(window.location.search)
   const groupId = params.get('g') || params.get('groupId') || tg?.initDataUnsafe?.start_param || null
 
-  // Prefer backend-provided values once an intent is created (prevents UI drift from build-time env).
-  const receiverAddressDisplay = activeIntent?.receiverAddress || receiverAddress
-  const tonPriceDisplay = Number(activeIntent?.expectedAmountTon ?? tonPriceTon)
+  // Multi-tenant only: receiver and price come from the backend intent.
+  const receiverAddressDisplay = activeIntent?.receiverAddress || '—'
+  const tonPriceDisplay = activeIntent?.expectedAmountTon != null ? Number(activeIntent.expectedAmountTon) : null
 
   function truncateAddr(addr) {
     const a = String(addr || '').trim()
@@ -208,6 +207,7 @@ function TonSection({ user, tg }) {
     try {
       setPayStatus('sending')
       setPayError(null)
+      setActiveIntent(null)
 
       // Create payment intent first (deterministic matching)
       const intentResp = await fetch('/api/payment-intents/create', {
@@ -224,6 +224,9 @@ function TonSection({ user, tg }) {
       setActiveIntent(intentData)
 
       const comment = intentData.reference
+      const receiver = String(intentData.receiverAddress || '').trim()
+      if (!receiver) throw new Error('Missing receiver address. Please contact the group admin.')
+      if (intentData.expectedAmountTon == null) throw new Error('Missing expected amount. Please try again.')
 
       const payloadCell = beginCell().storeUint(0, 32).storeStringTail(comment).endCell()
       const payloadBase64 = payloadCell.toBoc().toString('base64')
@@ -242,15 +245,15 @@ function TonSection({ user, tg }) {
                 payload: payloadBase64,
               },
               {
-                address: intentData.receiverAddress || receiverAddress,
+                address: receiver,
                 amount: toNano(adminAmountTon).toString(),
                 payload: payloadBase64,
               },
             ]
           : [
               {
-                address: intentData.receiverAddress || receiverAddress,
-                amount: toNano(Number(intentData.expectedAmountTon || tonPriceTon)).toString(),
+                address: receiver,
+                amount: toNano(String(intentData.expectedAmountTon)).toString(),
                 payload: payloadBase64,
               },
             ]
@@ -266,6 +269,36 @@ function TonSection({ user, tg }) {
     } catch (e) {
       setPayStatus('error')
       setPayError(String(e?.message || e))
+    }
+  }
+
+  const handleRegenerateInvite = async () => {
+    if (!tg?.initData) {
+      setRegenStatus('error')
+      setRegenError('Open this Mini App from Telegram (via the bot).')
+      return
+    }
+    if (!groupId) {
+      setRegenStatus('error')
+      setRegenError('Missing group id.')
+      return
+    }
+    try {
+      setRegenStatus('loading')
+      setRegenError(null)
+      const resp = await fetch('/api/user/regenerate-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData, groupId: String(groupId) }),
+      })
+      const data = await resp.json().catch(() => null)
+      if (!resp.ok) throw new Error(data?.error || `Regenerate failed (${resp.status})`)
+      await fetchUserStatus()
+      setRegenStatus('done')
+      setTimeout(() => setRegenStatus('idle'), 2000)
+    } catch (e) {
+      setRegenStatus('error')
+      setRegenError(String(e?.message || e))
     }
   }
 
@@ -342,7 +375,13 @@ function TonSection({ user, tg }) {
               >
                 Join Group
               </a>
+              {accessGranted && membership?.last_invite_link ? (
+                <button className="gradientBtn" onClick={handleRegenerateInvite} disabled={regenStatus === 'loading'}>
+                  {regenStatus === 'loading' ? 'Regenerating…' : '🔄 Regenerate Invite'}
+                </button>
+              ) : null}
             </div>
+            {regenStatus === 'error' && regenError ? <p className="loading status-error">Invite: {regenError}</p> : null}
           </div>
         ) : null}
       </section>
@@ -359,7 +398,11 @@ function TonSection({ user, tg }) {
           onClick={handlePayment}
           disabled={!walletAddress || payStatus === 'sending' || payStatus === 'sent'}
         >
-          {payStatus === 'sending' ? 'Sending…' : `Pay ${tonPriceDisplay} TON`}
+          {payStatus === 'sending'
+            ? 'Sending…'
+            : tonPriceDisplay != null
+              ? `Pay ${tonPriceDisplay} TON`
+              : 'Pay with TON'}
         </button>
 
         {payError ? <p className="loading status-error">Error: {payError}</p> : null}

@@ -325,5 +325,16 @@ export async function startVerifyPaymentWorker() {
 
 // Only start the long-running worker when executed directly (not when imported by serverless routes).
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  await startVerifyPaymentWorker()
+  const worker = await startVerifyPaymentWorker()
+  async function shutdown(signal) {
+    log.info({ signal }, 'worker_shutdown_start')
+    try {
+      await worker.close()
+    } catch (e) {
+      log.warn({ err: String(e?.message || e) }, 'worker_shutdown_error')
+    }
+    process.exit(0)
+  }
+  process.on('SIGTERM', () => shutdown('SIGTERM'))
+  process.on('SIGINT', () => shutdown('SIGINT'))
 }

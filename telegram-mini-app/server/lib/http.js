@@ -2,7 +2,9 @@ export function setCors(res) {
   const origin = String(process.env.WEB_APP_URL || '').trim().replace(/\/+$/, '')
   // In multi-tenant production, only allow the deployed Mini App origin.
   // Fallback to '*' only when WEB_APP_URL is not configured (local/dev).
-  res.setHeader('Access-Control-Allow-Origin', origin || '*')
+  const nodeEnv = String(process.env.NODE_ENV || '').trim().toLowerCase()
+  const allowOrigin = origin ? origin : nodeEnv === 'production' ? 'https://invalid.local' : '*'
+  res.setHeader('Access-Control-Allow-Origin', allowOrigin)
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,x-telegram-init-data')
 }

@@ -15,9 +15,6 @@ const pool = getDb()
 
 function isAuthorizedCron(req) {
   const secret = process.env.CRON_SECRET
-  const cronHeader = req.headers['x-vercel-cron']
-  const isVercelCron = Array.isArray(cronHeader) ? cronHeader[0] === '1' : cronHeader === '1'
-  if (isVercelCron) return true
   if (!secret) return { ok: false, status: 500, error: 'Missing CRON_SECRET' }
   const header = req.headers['x-cron-secret']
   const provided = Array.isArray(header) ? header[0] : header

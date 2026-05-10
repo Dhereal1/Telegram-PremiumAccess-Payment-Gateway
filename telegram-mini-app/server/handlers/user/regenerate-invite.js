@@ -3,6 +3,7 @@ import { setCors, readJson } from '../../lib/http.js'
 import { verifyTelegramData, parseTelegramUser } from '../../lib/telegram.js'
 import { parseJson, TelegramInitDataSchema } from '../../lib/validation.js'
 import { getQueues } from '../../lib/queue.js'
+import { rateLimit } from '../../lib/rate-limit.js'
 import { z } from 'zod'
 
 const BodySchema = TelegramInitDataSchema.extend({
@@ -33,6 +34,13 @@ export default async function handler(req, res) {
   if (!tgUser?.id) return res.status(400).json({ error: 'Missing Telegram user in initData' })
 
   if (!groupId) return res.status(400).json({ error: 'Missing groupId' })
+
+  try {
+    const rl = await rateLimit({ key: `regen_invite:${String(tgUser.id)}`, limit: 3, windowSeconds: 300 })
+    if (!rl.ok) return res.status(429).json({ error: 'Too many requests. Please wait before regenerating.' })
+  } catch {
+    // fail open if Redis unavailable
+  }
 
   const pool = getPool()
   const { accessGrantQueue } = getQueues()

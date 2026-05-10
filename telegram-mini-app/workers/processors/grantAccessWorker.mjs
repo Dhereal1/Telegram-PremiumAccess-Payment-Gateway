@@ -85,6 +85,20 @@ export async function processAccessGrantJob(job) {
   }
 
   logger.info({ jobId: job.id, queue: 'access-grant', membershipId }, 'access_grant_success')
+
+  // Notify admin of new subscriber (best-effort)
+  try {
+    const adminResult = await pool.query('SELECT admin_telegram_id FROM groups WHERE id=$1', [String(membership.group_id)])
+    const adminTelegramId = adminResult.rows[0]?.admin_telegram_id
+    if (adminTelegramId && String(adminTelegramId) !== String(telegramId)) {
+      await sendMessage(
+        adminTelegramId,
+        `💰 New subscriber!\n\nSomeone just paid and joined ${group?.name || 'your group'}.\n\nCheck your Admin Dashboard for earnings.`,
+      ).catch(() => {})
+    }
+  } catch {
+    // best-effort, never block access grant
+  }
 }
 
 export async function startGrantAccessWorker() {
@@ -117,5 +131,16 @@ export async function startGrantAccessWorker() {
 
 // Only start the long-running worker when executed directly (not when imported by serverless routes).
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  await startGrantAccessWorker()
+  const worker = await startGrantAccessWorker()
+  async function shutdown(signal) {
+    logger.info({ signal }, 'worker_shutdown_start')
+    try {
+      await worker.close()
+    } catch (e) {
+      logger.warn({ err: String(e?.message || e) }, 'worker_shutdown_error')
+    }
+    process.exit(0)
+  }
+  process.on('SIGTERM', () => shutdown('SIGTERM'))
+  process.on('SIGINT', () => shutdown('SIGINT'))
 }

@@ -8,6 +8,7 @@ import { enqueuePaymentVerification } from '../producers/enqueuePaymentVerificat
 const env = getWorkerEnv();
 const log = getWorkerLogger();
 const pool = getDb();
+let running = true
 
 log.info(
   {
@@ -109,7 +110,7 @@ async function main() {
   const intervalMs = Number(process.env.TON_LISTENER_INTERVAL_MS || '15000');
   log.info({ intervalMs }, 'tonListener started');
 
-  while (true) {
+  while (running) {
     try {
       const wallets = await getWalletsToPoll()
       if (!wallets.length) {
@@ -138,5 +139,19 @@ export { pollOnceForWallet as pollOnce };
 
 // Only start the long-running listener when executed directly (not when imported by serverless routes).
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main();
+  const p = main()
+  async function shutdown(signal) {
+    running = false
+    log.info({ signal }, 'worker_shutdown_start')
+    // Allow the loop to exit naturally; also add a failsafe.
+    setTimeout(() => process.exit(0), 10_000).unref?.()
+    try {
+      await p
+    } catch {
+      // ignore
+    }
+    process.exit(0)
+  }
+  process.on('SIGTERM', () => shutdown('SIGTERM'))
+  process.on('SIGINT', () => shutdown('SIGINT'))
 }
