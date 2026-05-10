@@ -1,8 +1,7 @@
 import fetch from 'node-fetch'
 
-const BOT_TOKEN = process.env.BOT_TOKEN
-
 export async function createInviteLink({ chatId, memberLimit = 1, expireSeconds = 3600 } = {}) {
+  const BOT_TOKEN = process.env.BOT_TOKEN
   if (!BOT_TOKEN) throw new Error('Missing BOT_TOKEN')
   if (!chatId) throw new Error('Missing chatId')
 
@@ -25,7 +24,10 @@ export async function createInviteLink({ chatId, memberLimit = 1, expireSeconds 
 }
 
 export async function sendMessage(chatId, text, opts = {}) {
+  const BOT_TOKEN = process.env.BOT_TOKEN
   if (!BOT_TOKEN) throw new Error('Missing BOT_TOKEN')
+  if (!chatId) throw new Error('Missing chatId')
+  if (typeof text !== 'string' || !text.trim()) throw new Error('Missing text')
 
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`
   const res = await fetch(url, {
@@ -34,8 +36,7 @@ export async function sendMessage(chatId, text, opts = {}) {
     body: JSON.stringify({
       chat_id: chatId,
       text,
-      disable_web_page_preview: true
-      ,
+      disable_web_page_preview: true,
       ...(opts?.reply_markup ? { reply_markup: opts.reply_markup } : {})
     })
   })
@@ -47,6 +48,7 @@ export async function sendMessage(chatId, text, opts = {}) {
 // Best-effort removal from a group/channel (requires bot admin permissions).
 // Implemented as "ban then unban" to mimic kick behavior.
 export async function kickChatMember({ chatId, userId }) {
+  const BOT_TOKEN = process.env.BOT_TOKEN
   if (!BOT_TOKEN) throw new Error('Missing BOT_TOKEN')
   if (!chatId) throw new Error('Missing chatId')
   if (!userId) throw new Error('Missing userId')
@@ -80,3 +82,5 @@ export async function kickChatMember({ chatId, userId }) {
   const unbanData = await unbanRes.json().catch(() => null)
   if (!unbanRes.ok || !unbanData?.ok) throw new Error(unbanData?.description || 'Failed to unbanChatMember')
 }
+
+
