@@ -54,9 +54,30 @@ async function expireMembershipBatch(limit) {
     // Best-effort: remove user from Telegram chat if bot is admin.
     try {
       const gp = getPool()
-      const g = await gp.query('SELECT telegram_chat_id FROM groups WHERE id=$1', [String(groupId)])
+      const g = await gp.query('SELECT telegram_chat_id, id, name FROM groups WHERE id=$1', [String(groupId)])
       const chatId = g.rows[0]?.telegram_chat_id
+      const groupName = g.rows[0]?.name || 'the group'
+      const webAppUrl = String(process.env.WEB_APP_URL || '').trim().replace(/\/+$/, '')
+      const reply_markup =
+        webAppUrl && g.rows[0]?.id
+          ? {
+              inline_keyboard: [
+                [
+                  {
+                    text: '🔄 Renew Now',
+                    web_app: { url: `${webAppUrl}/?g=${encodeURIComponent(String(g.rows[0].id))}` },
+                  },
+                ],
+              ],
+            }
+          : undefined
+
       if (chatId) await kickChatMember({ chatId, userId: telegramId })
+      await sendMessage(
+        telegramId,
+        `⏰ Your subscription to ${groupName} has expired and your access has been removed.\n\nTap below to renew!`,
+        reply_markup ? { reply_markup } : undefined,
+      ).catch(() => {})
     } catch (e) {
       logger.warn({ telegramId: String(telegramId), groupId: String(groupId), err: String(e?.message || e) }, 'expiry_kick_failed')
     }

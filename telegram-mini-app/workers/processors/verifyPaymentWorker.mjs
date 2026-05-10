@@ -228,14 +228,15 @@ async function processJob(job) {
 
     const membershipId = uuid()
     const membership = await client.query(
-      `INSERT INTO memberships (id, group_id, telegram_id, subscription_status, last_payment_at, current_period_end, payment_status, expiry_date, updated_at)
-       VALUES ($1,$2,$3,'active',NOW(), NOW() + make_interval(days => $4), TRUE, NOW() + make_interval(days => $4), NOW())
+      `INSERT INTO memberships (id, group_id, telegram_id, subscription_status, last_payment_at, current_period_end, payment_status, expiry_date, expiry_warning_sent_at, updated_at)
+       VALUES ($1,$2,$3,'active',NOW(), NOW() + make_interval(days => $4), TRUE, NOW() + make_interval(days => $4), NULL, NOW())
        ON CONFLICT (group_id, telegram_id) DO UPDATE SET
          subscription_status='active',
          last_payment_at=NOW(),
          current_period_end = GREATEST(COALESCE(memberships.current_period_end, NOW()), NOW()) + make_interval(days => $4),
          payment_status=TRUE,
          expiry_date = GREATEST(COALESCE(memberships.expiry_date, NOW()), NOW()) + make_interval(days => $4),
+         expiry_warning_sent_at = NULL,
          updated_at=NOW()
        RETURNING id, access_granted`,
       [membershipId, String(pi.group_id), String(telegramId), safeDurationDays],
