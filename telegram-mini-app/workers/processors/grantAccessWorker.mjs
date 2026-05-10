@@ -43,10 +43,17 @@ export async function processAccessGrantJob(job) {
   }
   const group = g.rows[0]
 
-  const claimed = forceRegenerate ? membership : await markMembershipAccessGrantedIfNotExists(membershipId)
-  if (!claimed) {
-    logger.info({ jobId: job.id, queue: 'access-grant', membershipId }, 'access_grant_already_claimed')
-    return
+  let claimed = null
+  if (forceRegenerate) {
+    // Put the membership in a clean state for regen; mark back to true after success.
+    await unmarkMembershipAccessGranted(membershipId).catch(() => {})
+    claimed = membership
+  } else {
+    claimed = await markMembershipAccessGrantedIfNotExists(membershipId)
+    if (!claimed) {
+      logger.info({ jobId: job.id, queue: 'access-grant', membershipId }, 'access_grant_already_claimed')
+      return
+    }
   }
 
   try {
@@ -70,6 +77,7 @@ export async function processAccessGrantJob(job) {
       await sendMessage(telegramId, aiCongrats).catch(() => {})
     }
     if (!forceRegenerate) await logEvent({ userId: String(claimed.telegram_id), type: 'access_granted', metadata: { groupId: String(membership.group_id) } })
+    if (forceRegenerate) await markMembershipAccessGrantedIfNotExists(membershipId).catch(() => {})
   } catch (e) {
     await logEvent({ userId: String(claimed.telegram_id), type: 'invite_failed', metadata: { error: String(e?.message || e), groupId: String(membership.group_id) } }).catch(() => {})
     if (!forceRegenerate) await unmarkMembershipAccessGranted(membershipId)
