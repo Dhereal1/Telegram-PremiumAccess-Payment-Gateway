@@ -3,7 +3,7 @@ import { pathToFileURL } from 'node:url'
 import { getWorkerLogger } from '../_lib/logger.mjs'
 import { getDb } from '../_lib/db.mjs'
 import { logEvent } from '../../services/subscriptionEvents.service.mjs'
-import { kickChatMember, sendMessage } from '../../services/telegram.service.mjs'
+import { kickChatMember, revokeInviteLink, sendMessage } from '../../services/telegram.service.mjs'
 import { logFailedJob } from '../_lib/failedJobs.mjs'
 import { ExpiryJobSchema, parseJob } from '../_lib/jobSchemas.mjs'
 import { getPool } from '../../db/index.mjs'
@@ -16,7 +16,7 @@ const pool = getDb()
 async function expireMembershipBatch(limit) {
   const res = await queryWithRetry(
     pool,
-    `SELECT id, telegram_id, group_id
+    `SELECT id, telegram_id, group_id, last_invite_link
      FROM memberships
      WHERE payment_status = true
        AND expiry_date IS NOT NULL
@@ -34,6 +34,7 @@ async function expireMembershipBatch(limit) {
        SET payment_status=false,
            access_granted=false,
            subscription_status='expired',
+           last_invite_link=NULL,
            updated_at=NOW()
        WHERE id=$1
          AND payment_status=true
@@ -50,7 +51,7 @@ async function expireMembershipBatch(limit) {
     await logEvent({ userId: String(telegramId), type: 'subscription_expired', metadata: { groupId: String(groupId) } }).catch(() => {})
     await logEvent({ userId: String(telegramId), type: 'access_revoked', metadata: { groupId: String(groupId) } }).catch(() => {})
 
-    // Best-effort: remove user from Telegram chat if bot is admin.
+    // Best-effort: revoke any outstanding invite link and remove user from Telegram chat if bot is admin.
     try {
       const gp = getPool()
       const g = await gp.query('SELECT telegram_chat_id, id, name FROM groups WHERE id=$1', [String(groupId)])
@@ -71,6 +72,7 @@ async function expireMembershipBatch(limit) {
             }
           : undefined
 
+      if (chatId && row.last_invite_link) await revokeInviteLink({ chatId, inviteLink: String(row.last_invite_link) }).catch(() => {})
       if (chatId) await kickChatMember({ chatId, userId: telegramId })
       await sendMessage(
         telegramId,
