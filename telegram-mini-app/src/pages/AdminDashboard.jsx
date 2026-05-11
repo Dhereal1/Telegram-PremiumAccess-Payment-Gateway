@@ -35,6 +35,10 @@ function AdminDashboard({ tg }) {
   const [walletSaveError, setWalletSaveError] = useState(null)
 
   const [toast, setToast] = useState(null)
+  const [editGroupId, setEditGroupId] = useState(null)
+  const [editValues, setEditValues] = useState({ name: '', price_ton: '', duration_days: '' })
+  const [editStatus, setEditStatus] = useState('idle') // idle|saving|error
+  const [editError, setEditError] = useState(null)
 
   function truncateAddr(addr) {
     const a = String(addr || '').trim()
@@ -143,6 +147,52 @@ function AdminDashboard({ tg }) {
     } catch {
       setToast('Copy failed')
       setTimeout(() => setToast(null), 1500)
+    }
+  }
+
+  function startEdit(g) {
+    setEditGroupId(String(g.id))
+    setEditValues({
+      name: String(g.name || ''),
+      price_ton: String(g.price_ton ?? ''),
+      duration_days: String(g.duration_days ?? ''),
+    })
+    setEditStatus('idle')
+    setEditError(null)
+  }
+
+  function cancelEdit() {
+    setEditGroupId(null)
+    setEditStatus('idle')
+    setEditError(null)
+  }
+
+  async function saveGroupEdits(groupId) {
+    if (!initData) return
+    try {
+      setEditStatus('saving')
+      setEditError(null)
+      const payload = {
+        initData,
+        name: String(editValues.name || '').trim(),
+        price_ton: Number(editValues.price_ton),
+        duration_days: Number(editValues.duration_days),
+      }
+      const resp = await fetch(`/api/admin/groups/${encodeURIComponent(String(groupId))}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await resp.json().catch(() => null)
+      if (!resp.ok) throw new Error(data?.error || `Save failed (${resp.status})`)
+      setToast('✅ Group settings updated')
+      setTimeout(() => setToast(null), 1500)
+      await refreshGroups()
+      setEditStatus('idle')
+      setEditGroupId(null)
+    } catch (e) {
+      setEditStatus('error')
+      setEditError(String(e?.message || e))
     }
   }
 
@@ -293,6 +343,7 @@ function AdminDashboard({ tg }) {
             const inaccessible = telegramStatus === 'inaccessible'
             const botNotAdmin = telegramStatus === 'bot_not_admin'
             const canShare = Boolean(link) && !inaccessible && !botNotAdmin
+            const isEditing = String(editGroupId || '') === String(g.id)
             return (
               <div key={g.id} className="card">
                 <div className="row">
@@ -330,6 +381,9 @@ function AdminDashboard({ tg }) {
                 </div>
 
                 <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  <button className="payBtn" onClick={() => (isEditing ? cancelEdit() : startEdit(g))}>
+                    {isEditing ? 'Cancel' : 'Edit'}
+                  </button>
                   <button
                     className="payBtn"
                     onClick={() => {
@@ -346,6 +400,46 @@ function AdminDashboard({ tg }) {
                     📋 Copy Bot Link
                   </button>
                 </div>
+
+                {isEditing ? (
+                  <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                    <div className="row">
+                      <span className="label">Name</span>
+                      <span className="value">
+                        <input
+                          value={editValues.name}
+                          onChange={(e) => setEditValues((v) => ({ ...v, name: e.target.value }))}
+                          style={{ width: '100%' }}
+                        />
+                      </span>
+                    </div>
+                    <div className="row">
+                      <span className="label">Price (TON)</span>
+                      <span className="value">
+                        <input
+                          value={editValues.price_ton}
+                          onChange={(e) => setEditValues((v) => ({ ...v, price_ton: e.target.value }))}
+                          style={{ width: '100%' }}
+                        />
+                      </span>
+                    </div>
+                    <div className="row">
+                      <span className="label">Duration (days)</span>
+                      <span className="value">
+                        <input
+                          value={editValues.duration_days}
+                          onChange={(e) => setEditValues((v) => ({ ...v, duration_days: e.target.value }))}
+                          style={{ width: '100%' }}
+                        />
+                      </span>
+                    </div>
+                    <button className="gradientBtn" onClick={() => saveGroupEdits(g.id)} disabled={editStatus === 'saving'}>
+                      {editStatus === 'saving' ? 'Saving…' : 'Save'}
+                    </button>
+                    {editStatus === 'error' && editError ? <div className="loading status-error">Save error: {editError}</div> : null}
+                  </div>
+                ) : null}
+
                 <div className="loading" style={{ marginTop: 8 }}>
                   Share this link with potential subscribers. They'll be guided through payment by the bot.
                 </div>

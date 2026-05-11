@@ -86,6 +86,7 @@ export async function sendMessage(chatId, text, opts = {}) {
       chat_id: chatId,
       text,
       disable_web_page_preview: true,
+      ...(opts?.parse_mode ? { parse_mode: opts.parse_mode } : {}),
       ...(opts?.reply_markup ? { reply_markup: opts.reply_markup } : {})
     })
   })

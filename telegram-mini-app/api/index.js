@@ -4,6 +4,7 @@ import adminWalletSet from '../server/handlers/admin/wallet-set.js'
 import adminGroupsCreate from '../server/handlers/admin/groups-create.js'
 import adminGroupsList from '../server/handlers/admin/groups-list.js'
 import adminGroupsFull from '../server/handlers/admin/groups-full.js'
+import adminGroupsUpdate from '../server/handlers/admin/groups-update.js'
 import adminGroupMembers from '../server/handlers/admin/group-members.js'
 import adminEarnings from '../server/handlers/admin/earnings.js'
 import adminPayoutRequest from '../server/handlers/admin/payout-request.js'
@@ -56,6 +57,13 @@ export default async function handler(req, res) {
       if (gm) {
         ensureQueryParam(req, 'groupId', decodeURIComponent(gm[1]))
         return adminGroupMembers(req, res)
+      }
+    }
+    if (method === 'PATCH') {
+      const gu = path.match(/^\/admin\/groups\/([^/]+)$/)
+      if (gu) {
+        ensureQueryParam(req, 'groupId', decodeURIComponent(gu[1]))
+        return adminGroupsUpdate(req, res)
       }
     }
 

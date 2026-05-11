@@ -30,3 +30,9 @@ bin/
 *.sw?
 
 .vercel
+
+# Local/test scripts (do not commit)
+**/reset-test.cjs
+**/clear-db.cjs
+**/regen-invite.cjs
+**/test-invite.cjs

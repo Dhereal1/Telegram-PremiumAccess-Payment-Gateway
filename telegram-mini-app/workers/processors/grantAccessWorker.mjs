@@ -112,10 +112,28 @@ export async function processAccessGrantJob(job) {
     const adminResult = await pool.query('SELECT admin_telegram_id FROM groups WHERE id=$1', [String(membership.group_id)])
     const adminTelegramId = adminResult.rows[0]?.admin_telegram_id
     if (adminTelegramId && String(adminTelegramId) !== String(telegramId)) {
+      const webAppUrl = String(process.env.WEB_APP_URL || '').trim().replace(/\/+$/, '')
+      const notificationText =
+        `💰 New subscriber!\n\n` +
+        `Someone just paid and joined *${group?.name || 'your group'}*.\n\n` +
+        `💎 Amount: ${String(group?.price_ton ?? '')} TON\n` +
+        `👥 Group: ${String(group?.name ?? '')}\n` +
+        `📅 Duration: ${String(group?.duration_days ?? '')} days`
+
       await sendMessage(
         adminTelegramId,
-        `💰 New subscriber!\n\nSomeone just paid and joined ${group?.name || 'your group'}.\n\nCheck your Admin Dashboard for earnings.`,
-      ).catch(() => {})
+        notificationText,
+        webAppUrl
+          ? {
+              parse_mode: 'Markdown',
+              reply_markup: {
+                inline_keyboard: [[{ text: '🛠 View Dashboard', web_app: { url: `${webAppUrl}/?admin=1` } }]],
+              },
+            }
+          : { parse_mode: 'Markdown' },
+      ).catch((e) => {
+        logger.warn({ adminTelegramId, err: String(e?.message || e), membershipId }, 'admin_notification_failed')
+      })
     }
   } catch {
     // best-effort, never block access grant

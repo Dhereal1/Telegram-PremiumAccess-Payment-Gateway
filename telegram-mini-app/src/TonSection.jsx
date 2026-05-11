@@ -121,7 +121,7 @@ function TonSection({ user, tg }) {
 
     let cancelled = false
     let attempts = 0
-    const maxAttempts = 30 // ~2 minutes @ 4s
+    const maxAttempts = 20 // ~2m40s @ 8s
 
     const interval = setInterval(async () => {
       attempts += 1
@@ -143,7 +143,7 @@ function TonSection({ user, tg }) {
         clearInterval(interval)
         if (!cancelled) setPayStatus('timeout')
       }
-    }, 4000)
+    }, 8000)
 
     return () => {
       cancelled = true
