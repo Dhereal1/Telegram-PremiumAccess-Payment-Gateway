@@ -20,14 +20,19 @@ log.info(
 
 async function getWalletsToPoll() {
   // Multi-tenant: poll wallets configured for admins that have active groups.
-  const wallets = await pool.query(
-    `SELECT DISTINCT a.wallet_address
-     FROM admins a
-     JOIN groups g ON g.admin_telegram_id = a.telegram_id
-     WHERE g.is_active = TRUE`,
-  )
-  const list = wallets.rows.map((r) => r.wallet_address).filter(Boolean)
-  return list
+  const client = await pool.connect()
+  try {
+    const wallets = await client.query(
+      `SELECT DISTINCT a.wallet_address
+       FROM admins a
+       JOIN groups g ON g.admin_telegram_id = a.telegram_id
+       WHERE g.is_active = TRUE`,
+    )
+    const list = wallets.rows.map((r) => r.wallet_address).filter(Boolean)
+    return list
+  } finally {
+    client.release()
+  }
 }
 
 async function getCursorForWallet(walletAddress) {
@@ -112,6 +117,7 @@ async function main() {
 
   while (running) {
     try {
+      log.info('tonListener poll tick')
       const wallets = await getWalletsToPoll()
       if (!wallets.length) {
         log.warn('No admin wallets found to poll (multi-tenant only mode)')
