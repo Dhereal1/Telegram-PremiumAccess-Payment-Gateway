@@ -1,15 +1,26 @@
 import { useEffect, useMemo, useState } from 'react'
 import { TonConnectButton, useTonAddress } from '@tonconnect/ui-react'
 
-function buildGroupLink({ origin, groupId }) {
-  const url = new URL(origin)
-  url.searchParams.set('g', String(groupId))
-  return url.toString()
+function slugifyGroupName(name) {
+  return (
+    String(name || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 40) || 'group'
+  )
+}
+
+function buildBotDeepLink({ botUsername, groupName, groupId }) {
+  const u = String(botUsername || '').replace(/^@/, '').trim()
+  if (!u) return null
+  const start = `g_${slugifyGroupName(groupName)}_${String(groupId)}`
+  return `https://t.me/${u}?start=${encodeURIComponent(start)}`
 }
 
 function AdminDashboard({ tg }) {
   const initData = tg?.initData || ''
-  const origin = useMemo(() => window.location.origin + '/', [])
+  const botUsername = useMemo(() => String(import.meta.env.VITE_BOT_USERNAME || ''), [])
 
   const walletAddress = useTonAddress(false)
 
@@ -277,7 +288,7 @@ function AdminDashboard({ tg }) {
       {!loading && !error && groups.length ? (
         <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
           {groups.map((g) => {
-            const link = buildGroupLink({ origin, groupId: g.id })
+            const link = buildBotDeepLink({ botUsername, groupName: g.name, groupId: g.id }) || ''
             return (
               <div key={g.id} className="card">
                 <div className="row">
@@ -304,15 +315,24 @@ function AdminDashboard({ tg }) {
                 </div>
 
                 <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                  <button className="payBtn" onClick={() => window.open(link, '_blank', 'noopener,noreferrer')}>
-                    🔗 Share Payment Link
+                  <button
+                    className="payBtn"
+                    onClick={() => {
+                      const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}`
+                      const openTg = window.Telegram?.WebApp?.openTelegramLink
+                      if (typeof openTg === 'function') openTg(shareUrl)
+                      else window.open(shareUrl, '_blank', 'noopener,noreferrer')
+                    }}
+                    disabled={!link}
+                  >
+                    📤 Share
                   </button>
-                  <button className="payBtn" onClick={() => copy(link)}>
-                    📋 Copy Payment Link
+                  <button className="payBtn" onClick={() => copy(link)} disabled={!link}>
+                    📋 Copy Bot Link
                   </button>
                 </div>
                 <div className="loading" style={{ marginTop: 8 }}>
-                  Share this link with potential subscribers
+                  Share this link with potential subscribers. They'll be guided through payment by the bot.
                 </div>
               </div>
             )

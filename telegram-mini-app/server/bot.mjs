@@ -111,9 +111,10 @@ function parseVerifyCallbackData(data) {
   return s.slice('wallet_verify:'.length)
 }
 
-async function safeDmOrGroupNotice({ ctx, botUsername, adminId, chatId }) {
+async function safeDmOrGroupNotice({ ctx, botUsername, adminId, chatId, firstName }) {
   try {
-    await ctx.telegram.sendMessage(adminId, '👋 You added me to a group.\n\nLet’s set up your premium subscription.\n\nClick below to begin.', {
+    const nameSuffix = firstName ? `, ${firstName}` : ''
+    await ctx.telegram.sendMessage(adminId, `👋 Hi${nameSuffix}!\n\nYou added me to a group.\n\nLet’s set up your premium subscription.\n\nClick below to begin.`, {
       reply_markup: {
         inline_keyboard: [[{ text: '⚙️ Setup Group', callback_data: setupCallbackData(chatId) }]],
       },
@@ -153,7 +154,21 @@ export function createBot({ botToken, webAppUrl }) {
     }
   }
 
+  bot.command('help', async (ctx) => {
+    const firstName = ctx.from?.first_name || ''
+    const nameSuffix = firstName ? `, ${firstName}` : ''
+    await ctx.reply(
+      `❓ Help — TON Premium Access${nameSuffix}\n\n👤 For Admins:\n• Add bot to your group as admin\n• Set subscription price & duration\n• Share the bot link with subscribers\n• Track earnings in Admin Dashboard\n\n👥 For Subscribers:\n• Get a subscription link from the group admin\n• Click it and tap "Subscribe Now"\n• Connect TON wallet & pay\n• Receive instant group access\n\n💬 Having issues? Contact the group admin directly.`,
+      {
+        reply_markup: {
+          inline_keyboard: [[{ text: '🛠 Admin Dashboard', web_app: { url: makeMiniAppAdminUrl(normalizedWebAppUrl) } }]],
+        },
+      },
+    )
+  })
+
   bot.start(async (ctx) => {
+    const firstName = ctx.from?.first_name || ''
     const payload = ctx.startPayload
 
     // User deep-link flow: start=g_<groupId>
@@ -173,14 +188,13 @@ export function createBot({ botToken, webAppUrl }) {
       }
 
       const miniAppUrl = makeMiniAppGroupUrl(normalizedWebAppUrl, group.id)
-      await ctx.reply(
-        `Welcome to ${group.name}!\n\nSubscription: ${Number(group.price_ton)} TON / ${Number(group.duration_days)} days\n\nTap the button below to subscribe and get instant access.`,
-        {
-          reply_markup: {
-            inline_keyboard: [[{ text: 'Subscribe Now 🚀', web_app: { url: miniAppUrl } }]],
-          },
+      const nameSuffix = firstName ? `, ${firstName}` : ''
+      const subscriberWelcome = `👋 Welcome${nameSuffix} to ${group.name}!\n\n💎 Subscription: ${Number(group.price_ton)} TON / ${Number(group.duration_days)} days\n\n📱 How to subscribe:\n1️⃣ Tap "Subscribe Now" below\n2️⃣ Connect your TON wallet (Tonkeeper recommended)\n3️⃣ Confirm the payment\n\n✅ You'll receive a private invite link in this chat within 1-2 minutes after payment.\n\n🔒 Powered by TON blockchain — instant & secure.`
+      await ctx.reply(subscriberWelcome, {
+        reply_markup: {
+          inline_keyboard: [[{ text: 'Subscribe Now 🚀', web_app: { url: miniAppUrl } }]],
         },
-      )
+      })
       return
     }
 
@@ -199,16 +213,33 @@ export function createBot({ botToken, webAppUrl }) {
       }
     }
 
-    await ctx.reply('Welcome! Launch the app below:', {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: '🛠 Admin Dashboard',
-              web_app: { url: makeMiniAppAdminUrl(normalizedWebAppUrl) },
+    // Admin welcome tour (only when no deep link and no existing groups for this admin).
+    if (ctx.chat?.type === 'private' && ctx.from?.id) {
+      try {
+        const pool = getPool()
+        const existing = await pool.query('SELECT 1 FROM groups WHERE admin_telegram_id=$1 LIMIT 1', [String(ctx.from.id)])
+        if (!existing.rows.length) {
+          const nameSuffix = firstName ? `, ${firstName}` : ''
+          const adminWelcome = `👋 Welcome${nameSuffix}!\n\n🎯 TON Premium Access Bot lets you monetize your Telegram group with crypto subscriptions.\n\n📋 Quick Setup (3 steps):\n1️⃣ Add me to your private group as admin\n2️⃣ Set price & duration when prompted\n3️⃣ Connect your TON wallet in the dashboard\n\n💰 How it works:\n• Subscribers pay in TON cryptocurrency\n• Access granted automatically after payment\n• Members removed when subscription expires\n• You keep 90% of every payment\n\n🚀 To start: Add me to your private Telegram group as admin!`
+          await ctx.reply(adminWelcome, {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '🛠 Admin Dashboard', web_app: { url: makeMiniAppAdminUrl(normalizedWebAppUrl) } }],
+                [{ text: '❓ How it works', callback_data: 'help' }],
+              ],
             },
-          ],
-        ],
+          })
+          return
+        }
+      } catch {
+        // fall through to default welcome
+      }
+    }
+
+    const nameSuffix = firstName ? `, ${firstName}` : ''
+    await ctx.reply(`Welcome${nameSuffix}! Launch the app below:`, {
+      reply_markup: {
+        inline_keyboard: [[{ text: '🛠 Admin Dashboard', web_app: { url: makeMiniAppAdminUrl(normalizedWebAppUrl) } }]],
       },
     })
 
@@ -224,6 +255,21 @@ export function createBot({ botToken, webAppUrl }) {
     const data = ctx.callbackQuery?.data
     const adminId = String(ctx.from?.id || '')
     if (!adminId) return
+
+    if (String(data || '') === 'help') {
+      const firstName = ctx.from?.first_name || ''
+      const nameSuffix = firstName ? `, ${firstName}` : ''
+      await ctx.answerCbQuery().catch(() => {})
+      await ctx.reply(
+        `❓ Help — TON Premium Access${nameSuffix}\n\n👤 For Admins:\n• Add bot to your group as admin\n• Set subscription price & duration\n• Share the bot link with subscribers\n• Track earnings in Admin Dashboard\n\n👥 For Subscribers:\n• Get a subscription link from the group admin\n• Click it and tap "Subscribe Now"\n• Connect TON wallet & pay\n• Receive instant group access\n\n💬 Having issues? Contact the group admin directly.`,
+        {
+          reply_markup: {
+            inline_keyboard: [[{ text: '🛠 Admin Dashboard', web_app: { url: makeMiniAppAdminUrl(normalizedWebAppUrl) } }]],
+          },
+        },
+      )
+      return
+    }
 
     // Handle "Setup Group" button
     const setupChatId = parseSetupCallbackData(data)
@@ -354,7 +400,7 @@ export function createBot({ botToken, webAppUrl }) {
     })
     const botUsername = bot.botInfo?.username
     if (botUsername) {
-      await safeDmOrGroupNotice({ ctx, botUsername, adminId, chatId })
+      await safeDmOrGroupNotice({ ctx, botUsername, adminId, chatId, firstName: ctx.from?.first_name || '' })
     } else {
       // If botInfo isn't ready yet, at least try DM without deep link.
       try {

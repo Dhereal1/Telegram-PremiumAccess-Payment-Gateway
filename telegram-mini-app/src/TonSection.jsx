@@ -14,6 +14,7 @@ function TonSection({ user, tg }) {
   const [activeIntent, setActiveIntent] = useState(null)
   const [remoteStatus, setRemoteStatus] = useState(null)
   const [remoteStatusError, setRemoteStatusError] = useState(null)
+  const [currency, setCurrency] = useState('TON')
 
   const params = new URLSearchParams(window.location.search)
   const groupId = params.get('g') || params.get('groupId') || tg?.initDataUnsafe?.start_param || null
@@ -211,7 +212,7 @@ function TonSection({ user, tg }) {
       const intentResp = await fetch('/api/payment-intents/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg?.initData, ...(groupId ? { groupId } : {}) }),
+        body: JSON.stringify({ initData: tg?.initData, ...(groupId ? { groupId } : {}), currency }),
       })
       const intentData = await intentResp.json().catch(() => null)
       if (!intentResp.ok) {
@@ -225,6 +226,10 @@ function TonSection({ user, tg }) {
       const receiver = String(intentData.receiverAddress || '').trim()
       if (!receiver) throw new Error('Missing receiver address. Please contact the group admin.')
       if (intentData.expectedAmountTon == null) throw new Error('Missing expected amount. Please try again.')
+
+      if (String(currency).toUpperCase() !== 'TON') {
+        throw new Error('USDT is coming soon. Please pay with TON for now.')
+      }
 
       const payloadCell = beginCell().storeUint(0, 32).storeStringTail(comment).endCell()
       const payloadBase64 = payloadCell.toBoc().toString('base64')
@@ -353,6 +358,18 @@ function TonSection({ user, tg }) {
         <div className="row">
           <span className="label">Payment</span>
           <span className="value">{payStatusChip()}</span>
+        </div>
+
+        <div className="row">
+          <span className="label">Currency</span>
+          <span className="value" style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end' }}>
+            <button className="payBtn" onClick={() => setCurrency('TON')} disabled={currency === 'TON'}>
+              TON
+            </button>
+            <button className="payBtn" onClick={() => setCurrency('USDT')} disabled>
+              USDT <span className="chip status-pending" style={{ marginLeft: 6 }}><span className="chipDot" />Coming soon</span>
+            </button>
+          </span>
         </div>
 
         <button

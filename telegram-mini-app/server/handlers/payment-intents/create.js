@@ -14,6 +14,12 @@ import { Address, toNano } from '@ton/core'
 
 const log = getLogger()
 const GroupIdSchema = z.string().uuid()
+const CurrencySchema = z.enum(['TON', 'USDT'])
+const BodySchema = TelegramInitDataSchema.extend({
+  groupId: z.string().uuid().optional(),
+  group_id: z.string().uuid().optional(),
+  currency: CurrencySchema.optional(),
+})
 
 function toUserFriendlyAddress(raw) {
   try {
@@ -51,7 +57,9 @@ export default async function handler(req, res) {
     }
 
     const body = await readJson(req)
-    const { initData } = parseJson(body, TelegramInitDataSchema)
+    const parsedBody = parseJson(body, BodySchema)
+    const initData = parsedBody.initData
+    const currency = String(parsedBody.currency || 'TON').toUpperCase()
 
     const maxAgeSeconds = Number(process.env.TELEGRAM_AUTH_MAX_AGE_SECONDS || '300')
     const verify = verifyTelegramData(initData, process.env.BOT_TOKEN, { maxAgeSeconds })
@@ -74,7 +82,7 @@ export default async function handler(req, res) {
     // This is still enforced during verification; expired intents won't be accepted.
     const expiresAt = new Date(now.getTime() + 60 * 60 * 1000) // 60 minutes
 
-    const groupId = body?.groupId || body?.group_id || null
+    const groupId = parsedBody.groupId || parsedBody.group_id || null
     if (!groupId) return res.status(400).json({ error: 'Missing groupId' })
     if (!GroupIdSchema.safeParse(String(groupId)).success) return res.status(400).json({ error: 'Invalid groupId' })
 
@@ -96,9 +104,9 @@ export default async function handler(req, res) {
 
     await queryWithRetry(
       pool,
-      `INSERT INTO payment_intents (id, telegram_id, group_id, expected_amount_ton, receiver_address, status, created_at, expires_at)
-       VALUES ($1, $2, $3, $4, $5, 'pending', NOW(), $6)`,
-      [intentId, String(tgUser.id), groupId ? String(groupId) : null, expectedTon, receiverAddress, expiresAt.toISOString()],
+      `INSERT INTO payment_intents (id, telegram_id, group_id, expected_amount_ton, receiver_address, currency, status, created_at, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, 'pending', NOW(), $7)`,
+      [intentId, String(tgUser.id), groupId ? String(groupId) : null, expectedTon, receiverAddress, currency, expiresAt.toISOString()],
       { attempts: 3 },
     )
 
@@ -128,6 +136,7 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store')
     return res.json({
       intentId,
+      currency,
       expectedAmountTon: expectedTon,
       receiverAddress,
       reference,
