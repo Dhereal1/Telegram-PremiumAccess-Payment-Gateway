@@ -4,7 +4,7 @@ import { getWorkerLogger } from '../_lib/logger.mjs'
 
 import { getMembershipById } from '../../services/user.service.mjs'
 import { markMembershipAccessGrantedIfNotExists, setMembershipInviteInfo, unmarkMembershipAccessGranted } from '../../services/subscription.service.mjs'
-import { createInviteLink, revokeInviteLink, sendMessage } from '../../services/telegram.service.mjs'
+import { createInviteLink, getChat, revokeInviteLink, sendMessage } from '../../services/telegram.service.mjs'
 import { logFailedJob } from '../_lib/failedJobs.mjs'
 import { logEvent } from '../../services/subscriptionEvents.service.mjs'
 import { AccessGrantJobSchema, parseJob } from '../_lib/jobSchemas.mjs'
@@ -59,6 +59,14 @@ export async function processAccessGrantJob(job) {
   try {
     if (forceRegenerate) {
       await logEvent({ userId: String(claimed.telegram_id), type: 'invite_regen_requested', metadata: {} }).catch(() => {})
+    }
+
+    // Verify group is still accessible before generating an invite link.
+    try {
+      await getChat({ chatId })
+    } catch (e) {
+      logger.error({ jobId: job.id, queue: 'access-grant', membershipId, chatId, err: String(e?.message || e) }, 'access_grant_group_inaccessible')
+      throw e
     }
 
     // Revoke old invite link before creating a new one (security: prevent link sharing).

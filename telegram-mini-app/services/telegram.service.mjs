@@ -1,5 +1,11 @@
 import fetch from 'node-fetch'
 
+function fetchWithTimeout(url, { timeoutMs, ...opts } = {}) {
+  const controller = new AbortController()
+  const t = setTimeout(() => controller.abort(), timeoutMs || 3000)
+  return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(t))
+}
+
 export async function createInviteLink({ chatId, memberLimit = 1, expireSeconds = 3600 } = {}) {
   const BOT_TOKEN = process.env.BOT_TOKEN
   if (!BOT_TOKEN) throw new Error('Missing BOT_TOKEN')
@@ -8,7 +14,8 @@ export async function createInviteLink({ chatId, memberLimit = 1, expireSeconds 
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/createChatInviteLink`
   const now = Math.floor(Date.now() / 1000)
 
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
+    timeoutMs: 3000,
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -29,7 +36,8 @@ export async function revokeInviteLink({ chatId, inviteLink } = {}) {
   if (!chatId || !inviteLink) return
 
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/revokeChatInviteLink`
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
+    timeoutMs: 3000,
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ chat_id: chatId, invite_link: inviteLink }),
@@ -39,6 +47,23 @@ export async function revokeInviteLink({ chatId, inviteLink } = {}) {
   return data
 }
 
+export async function getChat({ chatId } = {}) {
+  const BOT_TOKEN = process.env.BOT_TOKEN
+  if (!BOT_TOKEN) throw new Error('Missing BOT_TOKEN')
+  if (!chatId) throw new Error('Missing chatId')
+
+  const url = `https://api.telegram.org/bot${BOT_TOKEN}/getChat`
+  const res = await fetchWithTimeout(url, {
+    timeoutMs: 3000,
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId }),
+  })
+  const data = await res.json().catch(() => null)
+  if (!res.ok || !data?.ok) throw new Error(data?.description || 'Failed to getChat')
+  return data.result
+}
+
 export async function sendMessage(chatId, text, opts = {}) {
   const BOT_TOKEN = process.env.BOT_TOKEN
   if (!BOT_TOKEN) throw new Error('Missing BOT_TOKEN')
@@ -46,7 +71,8 @@ export async function sendMessage(chatId, text, opts = {}) {
   if (typeof text !== 'string' || !text.trim()) throw new Error('Missing text')
 
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
+    timeoutMs: 3000,
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -73,7 +99,8 @@ export async function kickChatMember({ chatId, userId }) {
   const unbanUrl = `https://api.telegram.org/bot${BOT_TOKEN}/unbanChatMember`
   const now = Math.floor(Date.now() / 1000)
 
-  const banRes = await fetch(banUrl, {
+  const banRes = await fetchWithTimeout(banUrl, {
+    timeoutMs: 3000,
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -86,7 +113,8 @@ export async function kickChatMember({ chatId, userId }) {
   const banData = await banRes.json().catch(() => null)
   if (!banRes.ok || !banData?.ok) throw new Error(banData?.description || 'Failed to banChatMember')
 
-  const unbanRes = await fetch(unbanUrl, {
+  const unbanRes = await fetchWithTimeout(unbanUrl, {
+    timeoutMs: 3000,
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({

@@ -289,11 +289,26 @@ function AdminDashboard({ tg }) {
         <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
           {groups.map((g) => {
             const link = buildBotDeepLink({ botUsername, groupName: g.name, groupId: g.id }) || ''
+            const telegramStatus = String(g.telegram_status || '').trim() || 'ok'
+            const inaccessible = telegramStatus === 'inaccessible'
+            const botNotAdmin = telegramStatus === 'bot_not_admin'
+            const canShare = Boolean(link) && !inaccessible && !botNotAdmin
             return (
               <div key={g.id} className="card">
                 <div className="row">
                   <span className="label">Name</span>
-                  <span className="value">{g.name}</span>
+                  <span className="value" style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                    {g.name}
+                    {inaccessible ? (
+                      <span className="chip status-error">
+                        <span className="chipDot" /> ⚠️ Group Inaccessible
+                      </span>
+                    ) : botNotAdmin ? (
+                      <span className="chip status-pending">
+                        <span className="chipDot" /> ⚠️ Bot not admin
+                      </span>
+                    ) : null}
+                  </span>
                 </div>
                 <div className="row">
                   <span className="label">Price</span>
@@ -323,17 +338,28 @@ function AdminDashboard({ tg }) {
                       if (typeof openTg === 'function') openTg(shareUrl)
                       else window.open(shareUrl, '_blank', 'noopener,noreferrer')
                     }}
-                    disabled={!link}
+                    disabled={!canShare}
                   >
                     📤 Share
                   </button>
-                  <button className="payBtn" onClick={() => copy(link)} disabled={!link}>
+                  <button className="payBtn" onClick={() => copy(link)} disabled={!canShare}>
                     📋 Copy Bot Link
                   </button>
                 </div>
                 <div className="loading" style={{ marginTop: 8 }}>
                   Share this link with potential subscribers. They'll be guided through payment by the bot.
                 </div>
+                {inaccessible ? (
+                  <div className="loading status-error" style={{ marginTop: 8 }}>
+                    This group was deleted or the bot was removed. Subscribers can no longer join.
+                    <div style={{ marginTop: 4 }}>Re-add the bot to a group to reactivate.</div>
+                  </div>
+                ) : botNotAdmin ? (
+                  <div className="loading status-pending" style={{ marginTop: 8 }}>
+                    The bot is no longer an admin in this group. Invite links cannot be created until you re-add the bot as an admin.
+                    <div style={{ marginTop: 4 }}>Re-add the bot to a group to reactivate.</div>
+                  </div>
+                ) : null}
               </div>
             )
           })}
