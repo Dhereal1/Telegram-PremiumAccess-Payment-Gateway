@@ -42,7 +42,10 @@ export async function markMembershipAccessGrantedIfNotExists(membershipId) {
   const res = await pool.query(
     `UPDATE memberships
      SET access_granted = true, updated_at=NOW()
-     WHERE id = $1 AND access_granted = false
+     WHERE id = $1
+       AND access_granted = false
+       AND payment_status = true
+       AND subscription_status = 'active'
      RETURNING *`,
     [String(membershipId)],
   )

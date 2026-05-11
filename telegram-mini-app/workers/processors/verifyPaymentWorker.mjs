@@ -15,6 +15,9 @@ const env = getWorkerEnv()
 const log = getWorkerLogger()
 const pool = getDb()
 
+process.on('unhandledRejection', (e) => log.error({ err: String(e?.message || e) }, 'unhandledRejection'))
+process.on('uncaughtException', (e) => log.error({ err: String(e?.message || e) }, 'uncaughtException'))
+
 function uuid() {
   return crypto.randomUUID()
 }

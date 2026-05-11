@@ -4,6 +4,9 @@ import { getWorkerLogger } from '../_lib/logger.mjs'
 const logger = getWorkerLogger()
 let running = true
 
+process.on('unhandledRejection', (e) => logger.error({ err: String(e?.message || e) }, 'unhandledRejection'))
+process.on('uncaughtException', (e) => logger.error({ err: String(e?.message || e) }, 'uncaughtException'))
+
 async function tick() {
   // BullMQ does not allow ':' in custom job ids.
   const jobId = `expiry_${Math.floor(Date.now() / 60000)}`

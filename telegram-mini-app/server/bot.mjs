@@ -138,7 +138,12 @@ export function createBot({ botToken, webAppUrl }) {
 
   // Only fetch bot info when needed (avoids hard-failing on transient DNS issues).
   if (!process.env.BOT_USERNAME) {
-    bot.telegram.getMe().then((me) => { bot.botInfo = me }).catch(() => {})
+    bot.telegram
+      .getMe()
+      .then((me) => {
+        bot.botInfo = me
+      })
+      .catch((e) => log.warn({ err: String(e?.message || e) }, 'bot_getMe_failed'))
   }
 
   async function getBotUsername() {

@@ -26,6 +26,13 @@ export async function createInviteLink({ chatId, memberLimit = 1, expireSeconds 
   })
 
   const data = await res.json().catch(() => null)
+  if (res.status === 429) {
+    const retryAfter = data?.parameters?.retry_after || 5
+    const err = new Error(`Telegram rate limit. Retry after ${retryAfter}s`)
+    err.retryAfter = retryAfter
+    err.code = 'TELEGRAM_RATE_LIMIT'
+    throw err
+  }
   if (!res.ok || !data?.ok) throw new Error(data?.description || 'Failed to create invite link')
   return data.result.invite_link
 }
@@ -84,6 +91,13 @@ export async function sendMessage(chatId, text, opts = {}) {
   })
 
   const data = await res.json().catch(() => null)
+  if (res.status === 429) {
+    const retryAfter = data?.parameters?.retry_after || 5
+    const err = new Error(`Telegram rate limit. Retry after ${retryAfter}s`)
+    err.retryAfter = retryAfter
+    err.code = 'TELEGRAM_RATE_LIMIT'
+    throw err
+  }
   if (!res.ok || !data?.ok) throw new Error(data?.description || 'Failed to send message')
 }
 
@@ -111,6 +125,13 @@ export async function kickChatMember({ chatId, userId }) {
     }),
   })
   const banData = await banRes.json().catch(() => null)
+  if (banRes.status === 429) {
+    const retryAfter = banData?.parameters?.retry_after || 5
+    const err = new Error(`Telegram rate limit. Retry after ${retryAfter}s`)
+    err.retryAfter = retryAfter
+    err.code = 'TELEGRAM_RATE_LIMIT'
+    throw err
+  }
   if (!banRes.ok || !banData?.ok) throw new Error(banData?.description || 'Failed to banChatMember')
 
   const unbanRes = await fetchWithTimeout(unbanUrl, {
@@ -124,6 +145,13 @@ export async function kickChatMember({ chatId, userId }) {
     }),
   })
   const unbanData = await unbanRes.json().catch(() => null)
+  if (unbanRes.status === 429) {
+    const retryAfter = unbanData?.parameters?.retry_after || 5
+    const err = new Error(`Telegram rate limit. Retry after ${retryAfter}s`)
+    err.retryAfter = retryAfter
+    err.code = 'TELEGRAM_RATE_LIMIT'
+    throw err
+  }
   if (!unbanRes.ok || !unbanData?.ok) throw new Error(unbanData?.description || 'Failed to unbanChatMember')
 }
 

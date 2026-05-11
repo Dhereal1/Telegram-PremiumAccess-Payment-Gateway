@@ -13,6 +13,9 @@ import { chatComplete } from '../../server/lib/groq.js'
 const logger = getWorkerLogger()
 const pool = getDb()
 
+process.on('unhandledRejection', (e) => logger.error({ err: String(e?.message || e) }, 'unhandledRejection'))
+process.on('uncaughtException', (e) => logger.error({ err: String(e?.message || e) }, 'uncaughtException'))
+
 async function expireMembershipBatch(limit) {
   const res = await queryWithRetry(
     pool,

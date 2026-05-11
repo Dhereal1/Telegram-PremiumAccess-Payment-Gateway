@@ -50,12 +50,20 @@ export default async function handler(req, res) {
     queueStats = await safe(
       (async () => {
         const { paymentVerificationQueue, accessGrantQueue, notificationQueue } = getQueues()
-        const [pv, ag, nf] = await Promise.all([
+        const results = await Promise.allSettled([
           paymentVerificationQueue.getJobCounts(),
           accessGrantQueue.getJobCounts(),
           notificationQueue.getJobCounts(),
         ])
-        return { paymentVerification: pv, accessGrant: ag, notification: nf }
+        const counts = {
+          paymentVerification: results[0].status === 'fulfilled' ? results[0].value : null,
+          accessGrant: results[1].status === 'fulfilled' ? results[1].value : null,
+          notification: results[2].status === 'fulfilled' ? results[2].value : null,
+        }
+        const errors = results
+          .map((r, i) => (r.status === 'rejected' ? { queue: ['paymentVerification', 'accessGrant', 'notification'][i], error: String(r.reason?.message || r.reason) } : null))
+          .filter(Boolean)
+        return { counts, errors }
       })(),
       'queues',
     )
@@ -68,6 +76,8 @@ export default async function handler(req, res) {
     durationMs,
     env,
     db: dbCheck.ok ? { ok: true } : { ok: false, error: dbCheck.error },
-    queues: queueStats.ok ? { ok: true, counts: queueStats.value } : { ok: false, error: queueStats.error },
+    queues: queueStats.ok
+      ? { ok: queueStats.value?.errors?.length ? false : true, counts: queueStats.value?.counts, errors: queueStats.value?.errors || [] }
+      : { ok: false, error: queueStats.error },
   })
 }

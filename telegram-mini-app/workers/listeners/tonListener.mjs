@@ -10,6 +10,9 @@ const log = getWorkerLogger();
 const pool = getDb();
 let running = true
 
+process.on('unhandledRejection', (e) => log.error({ err: String(e?.message || e) }, 'unhandledRejection'))
+process.on('uncaughtException', (e) => log.error({ err: String(e?.message || e) }, 'uncaughtException'))
+
 log.info(
   {
     tonApiUrl: env.TON_API_URL,

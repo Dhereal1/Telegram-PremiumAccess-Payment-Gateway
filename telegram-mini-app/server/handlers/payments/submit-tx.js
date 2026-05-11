@@ -39,8 +39,11 @@ export default async function handler(req, res) {
     try {
       const rl = await rateLimit({ key: `submit_tx:${String(tgUser.id)}`, limit: 5, windowSeconds: 60 })
       if (!rl.ok) return res.status(429).json({ error: 'Too many requests. Please slow down.' })
-    } catch {
-      // fail open if Redis unavailable
+    } catch (e) {
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(503).json({ error: 'Service temporarily unavailable. Please retry.' })
+      }
+      // dev: fail open
     }
 
     const pool = getPool()

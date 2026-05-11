@@ -55,31 +55,42 @@ export default async function handler(req, res) {
   }
 
   const pool = getPool()
-  const g = await pool.query(
-    `SELECT id, name, price_ton, duration_days, admin_telegram_id
-     FROM groups
-     WHERE id=$1 AND is_active=TRUE`,
-    [String(groupId)],
-  )
-  const group = g.rows[0]
-  if (!group) return res.status(404).json({ error: 'Group not found' })
+  const client = await pool.connect()
+  let group = null
+  let adminRow = null
+  let membership = null
+  try {
+    const g = await client.query(
+      `SELECT id, name, price_ton, duration_days, admin_telegram_id
+       FROM groups
+       WHERE id=$1 AND is_active=TRUE`,
+      [String(groupId)],
+    )
+    group = g.rows[0] || null
+    if (!group) return res.status(404).json({ error: 'Group not found' })
 
-  if (!String(process.env.GROQ_API_KEY || '').trim()) {
-    return res.json({ reply: 'AI is not configured right now.' })
+    if (!String(process.env.GROQ_API_KEY || '').trim()) {
+      return res.json({ reply: 'AI is not configured right now.' })
+    }
+
+    const admin = await client.query('SELECT telegram_id, wallet_address, wallet_verified_at FROM admins WHERE telegram_id=$1', [
+      String(group.admin_telegram_id),
+    ])
+    adminRow = admin.rows[0] || null
+
+    const m = await client.query(
+      `SELECT subscription_status, payment_status, access_granted, expiry_date, current_period_end, last_payment_at
+       FROM memberships
+       WHERE group_id=$1 AND telegram_id=$2`,
+      [String(group.id), String(tgUser.id)],
+    )
+    membership = m.rows[0] || null
+  } catch (e) {
+    log.error({ err: String(e?.message || e) }, 'ai_chat_db_error')
+    return res.status(503).json({ error: 'Service temporarily unavailable' })
+  } finally {
+    client.release()
   }
-
-  const admin = await pool.query('SELECT telegram_id, wallet_address, wallet_verified_at FROM admins WHERE telegram_id=$1', [
-    String(group.admin_telegram_id),
-  ])
-  const adminRow = admin.rows[0] || null
-
-  const m = await pool.query(
-    `SELECT subscription_status, payment_status, access_granted, expiry_date, current_period_end, last_payment_at
-     FROM memberships
-     WHERE group_id=$1 AND telegram_id=$2`,
-    [String(group.id), String(tgUser.id)],
-  )
-  const membership = m.rows[0] || null
 
   const platformWalletAddress = String(process.env.PLATFORM_WALLET_ADDRESS || '').trim() || null
   const platformFeePercentRaw = String(process.env.PLATFORM_FEE_PERCENT || '10').trim()

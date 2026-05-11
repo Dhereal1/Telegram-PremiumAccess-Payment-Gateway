@@ -13,6 +13,9 @@ import { chatComplete } from '../../server/lib/groq.js'
 
 const logger = getWorkerLogger()
 
+process.on('unhandledRejection', (e) => logger.error({ err: String(e?.message || e) }, 'unhandledRejection'))
+process.on('uncaughtException', (e) => logger.error({ err: String(e?.message || e) }, 'uncaughtException'))
+
 export async function processAccessGrantJob(job) {
   const { userId, membershipId, groupId, telegramId, forceRegenerate } = parseJob(AccessGrantJobSchema, job.data || {})
 
@@ -80,7 +83,9 @@ export async function processAccessGrantJob(job) {
     await setMembershipInviteInfo({ membershipId, inviteLink })
     await logEvent({ userId: String(claimed.telegram_id), type: 'invite_sent', metadata: { inviteLink, groupId: String(membership.group_id) } })
 
-    await sendMessage(telegramId, `✅ Payment confirmed!\n\nJoin here:\n${inviteLink}`)
+    await sendMessage(telegramId, `✅ Payment confirmed!\n\nJoin here:\n${inviteLink}`).catch((e) => {
+      logger.warn({ telegramId, err: String(e?.message || e), membershipId }, 'grant_access_dm_failed')
+    })
 
     const aiCongrats = await chatComplete({
       system: `You are a friendly community assistant for \"${group?.name || 'this group'}\".\nWrite a short congratulations message (2 sentences) for a user who just subscribed. Tell them they now have access and to use the invite link. Be warm and welcoming.`,
@@ -88,7 +93,9 @@ export async function processAccessGrantJob(job) {
       maxTokens: 100,
     })
     if (aiCongrats) {
-      await sendMessage(telegramId, aiCongrats).catch(() => {})
+      await sendMessage(telegramId, aiCongrats).catch((e) => {
+        logger.warn({ telegramId, err: String(e?.message || e), membershipId }, 'grant_access_ai_dm_failed')
+      })
     }
     if (!forceRegenerate) await logEvent({ userId: String(claimed.telegram_id), type: 'access_granted', metadata: { groupId: String(membership.group_id) } })
     if (forceRegenerate) await markMembershipAccessGrantedIfNotExists(membershipId).catch(() => {})

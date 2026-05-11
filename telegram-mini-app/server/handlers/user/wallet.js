@@ -17,8 +17,8 @@ export default async function handler(req, res) {
 
   const initData = body?.initData
   const walletAddress = body?.wallet_address
-  if (!walletAddress || typeof walletAddress !== 'string') {
-    return res.status(400).json({ error: 'Missing wallet_address' })
+  if (!walletAddress || typeof walletAddress !== 'string' || walletAddress.length > 200) {
+    return res.status(400).json({ error: 'Invalid wallet_address' })
   }
 
   const botToken = process.env.BOT_TOKEN
@@ -49,5 +49,6 @@ export default async function handler(req, res) {
     return res.status(404).json({ error: 'User not found. Call /api/auth/telegram first.' })
   }
 
+  res.setHeader('Cache-Control', 'no-store')
   return res.json({ success: true, user: result.rows[0] })
 }

@@ -52,8 +52,11 @@ export default async function handler(req, res) {
     try {
       const rl = await rateLimit({ key: `pi:${ipKey(req)}`, limit: 30, windowSeconds: 60 })
       if (!rl.ok) return res.status(429).json({ error: 'Too many requests' })
-    } catch {
-      // If REDIS_URL not set, skip rate limiting (dev)
+    } catch (e) {
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(503).json({ error: 'Service temporarily unavailable. Please retry.' })
+      }
+      // dev: fail open
     }
 
     const body = await readJson(req)
@@ -72,8 +75,11 @@ export default async function handler(req, res) {
     try {
       const rlUser = await rateLimit({ key: `pi_u:${String(tgUser.id)}`, limit: 3, windowSeconds: 60 })
       if (!rlUser.ok) return res.status(429).json({ error: 'Too many payment intents, slow down' })
-    } catch {
-      // If REDIS_URL not set, skip rate limiting (dev)
+    } catch (e) {
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(503).json({ error: 'Service temporarily unavailable. Please retry.' })
+      }
+      // dev: fail open
     }
 
     const intentId = crypto.randomUUID()

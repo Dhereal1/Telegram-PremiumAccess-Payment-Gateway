@@ -1,6 +1,15 @@
 import { setCors } from '../../lib/http.js'
 import { getPool } from '../../lib/db.js'
 import { parseTelegramUser, verifyTelegramData } from '../../lib/telegram.js'
+import { getLogger } from '../../lib/log.js'
+
+const log = getLogger()
+
+const DEFINITIVE_ERRORS = ['chat not found', 'bot was kicked', 'group chat was deleted', 'forbidden', 'have no rights', 'not enough rights']
+function isDefinitiveError(err) {
+  const msg = String(err?.message || err).toLowerCase()
+  return DEFINITIVE_ERRORS.some((e) => msg.includes(e))
+}
 
 function fetchWithTimeout(url, { timeoutMs, ...opts } = {}) {
   const controller = new AbortController()
@@ -114,9 +123,18 @@ export default async function handler(req, res) {
       if (!g.telegram_chat_id) return { id: g.id, status: null }
       try {
         await getChat({ botToken, chatId: g.telegram_chat_id })
-      } catch {
-        await pool.query('UPDATE groups SET is_active=FALSE WHERE id=$1', [String(g.id)]).catch(() => {})
-        return { id: g.id, status: 'inaccessible' }
+      } catch (e) {
+        const msg = String(e?.message || e)
+        log.warn({ groupId: String(g.id), chatId: String(g.telegram_chat_id), err: msg }, 'groups_full_getChat_failed')
+
+        if (isDefinitiveError(e)) {
+          await pool
+            .query('UPDATE groups SET is_active=FALSE WHERE id=$1', [String(g.id)])
+            .catch((e2) => log.warn({ groupId: g.id, err: String(e2?.message || e2) }, 'groups_full_deactivate_failed'))
+          return { id: g.id, status: 'inaccessible' }
+        }
+
+        return { id: g.id, status: 'unknown' }
       }
 
       if (!botId) return { id: g.id, status: 'ok' }
@@ -125,7 +143,8 @@ export default async function handler(req, res) {
         const s = String(member?.status || '')
         const isAdmin = s === 'administrator' || s === 'creator'
         return { id: g.id, status: isAdmin ? 'ok' : 'bot_not_admin' }
-      } catch {
+      } catch (e) {
+        log.warn({ groupId: String(g.id), chatId: String(g.telegram_chat_id), err: String(e?.message || e) }, 'groups_full_getChatMember_failed')
         return { id: g.id, status: 'ok' }
       }
     }),
